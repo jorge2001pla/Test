@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #faf8f3;
+  --card: #ffffff;
+  --foreground: #16140f;
+  --muted-foreground: #6b6355;
+  --border: #e6e0d2;
+  --gold: #b8860f;
+  --gold-bright: #e8a91a;
+  --brand-black: #0b0a08;
+  --header-bg: #0b0a08;
+  --header-foreground: #f5f1e6;
+}
+
+:root.dark {
+  --background: #0b0a08;
+  --card: #17150f;
+  --foreground: #f5f1e6;
+  --muted-foreground: #a69c87;
+  --border: #2a271e;
+  --gold: #e8a91a;
+  --gold-bright: #f5c242;
+  --brand-black: #000000;
+  --header-bg: #000000;
+  --header-foreground: #f5f1e6;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-gold: var(--gold);
+  --color-gold-bright: var(--gold-bright);
+  --color-brand-black: var(--brand-black);
+  --color-header-bg: var(--header-bg);
+  --color-header-foreground: var(--header-foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-playfair);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+::selection {
+  background: var(--gold);
+  color: var(--brand-black);
+}
