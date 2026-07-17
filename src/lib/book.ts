@@ -13,6 +13,10 @@ export interface BookClient {
   status: ClientStatus;
   notes: string | null;
   callbackScheduledAt: string | null;
+  /** 'manual' for clients added through Log New Account/Add Client, 'import' for bulk-loaded
+   * legacy records — createdAt on 'import' rows reflects when they were loaded, not real intake,
+   * so only 'manual' rows are eligible for the never-called-yet nudge. */
+  source: "manual" | "import";
   createdAt: string;
   updatedAt: string;
 }
@@ -31,6 +35,7 @@ interface BookClientRowDb {
   status: ClientStatus;
   notes: string | null;
   callback_scheduled_at: string | null;
+  source: "manual" | "import";
   created_at: string;
   updated_at: string;
 }
@@ -54,6 +59,7 @@ function mapBookClient(row: BookClientRowDb): BookClient {
     status: row.status,
     notes: row.notes,
     callbackScheduledAt: row.callback_scheduled_at,
+    source: row.source,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -73,6 +79,34 @@ export async function listBookClients(): Promise<BookClient[]> {
   await ready();
   const res = await db.execute("SELECT * FROM book_clients ORDER BY last_name, first_name");
   return (res.rows as unknown as BookClientRowDb[]).map(mapBookClient);
+}
+
+export interface BookClientWithLastContact extends BookClient {
+  /** Timestamp of the most recent call log entry, or null if this client has never been called. */
+  lastContactAt: string | null;
+  lastNote: string | null;
+}
+
+/** Every book client plus when (and what) they were last called about — powers both the
+ * never-called-yet nudge and the dormant reactivation list. */
+export async function listBookClientsWithLastContact(): Promise<BookClientWithLastContact[]> {
+  await ready();
+  const res = await db.execute(`
+    SELECT bc.*,
+      (SELECT timestamp FROM book_call_log_entries WHERE book_client_id = bc.id ORDER BY timestamp DESC LIMIT 1) AS last_contact_at,
+      (SELECT note_text FROM book_call_log_entries WHERE book_client_id = bc.id ORDER BY timestamp DESC LIMIT 1) AS last_note
+    FROM book_clients bc
+    ORDER BY bc.last_name, bc.first_name
+  `);
+  const rows = res.rows as unknown as (BookClientRowDb & {
+    last_contact_at: string | null;
+    last_note: string | null;
+  })[];
+  return rows.map((row) => ({
+    ...mapBookClient(row),
+    lastContactAt: row.last_contact_at,
+    lastNote: row.last_note,
+  }));
 }
 
 export async function getBookClient(id: string): Promise<BookClientWithCallLog | undefined> {
@@ -102,8 +136,8 @@ export async function createBookClient(input: NewBookClientInput): Promise<BookC
   const id = randomUUID();
   const createdAt = localDateTimeString();
   await db.execute({
-    sql: `INSERT INTO book_clients (id, email, first_name, last_name, phone, secondary_phone, notes, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO book_clients (id, email, first_name, last_name, phone, secondary_phone, notes, source, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
     args: [
       id,
       input.email ?? null,

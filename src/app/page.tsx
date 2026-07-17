@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { listClientsWithLastCallNote, listScheduledCallbacks } from "@/lib/clients";
-import { listBookClients, listScheduledBookCallbacks, countBookClientsCreatedInRange } from "@/lib/book";
+import {
+  listBookClientsWithLastContact,
+  listScheduledBookCallbacks,
+  countBookClientsCreatedInRange,
+} from "@/lib/book";
 import { listActiveShipments } from "@/lib/shipments";
 import { listActiveReminders } from "@/lib/reminders";
 import { listNotes } from "@/lib/notes";
@@ -8,7 +12,10 @@ import {
   buildFollowUpSections,
   buildTodaysPriority,
   currentWeekRange,
+  DORMANT_DAYS,
+  daysSince,
   findMissedCallbacks,
+  isWithinNeverCalledWindow,
   localDateString,
   WEEKLY_GOAL,
 } from "@/lib/business-logic";
@@ -64,10 +71,21 @@ export default async function DashboardPage({
 
   const clients = await listClientsWithLastCallNote();
   const sections = buildFollowUpSections(clients);
-  const bookClients = await listBookClients();
+  const bookClients = await listBookClientsWithLastContact();
   const bookCount = bookClients.length;
   const todaysWindowAndCallbacks = buildTodaysPriority(clients, now);
   const activeShipments = await listActiveShipments();
+
+  const dormantCount = bookClients.filter(
+    (c) => c.status !== "NOT_INTERESTED" && c.lastContactAt !== null && daysSince(c.lastContactAt, now) >= DORMANT_DAYS
+  ).length;
+
+  const neverCalled15Day = clients.filter(
+    (c) => c.lastCallNote === null && isWithinNeverCalledWindow(c.firstSaleDate, now)
+  );
+  const neverCalledBook = bookClients.filter(
+    (c) => c.source === "manual" && c.lastContactAt === null && isWithinNeverCalledWindow(c.createdAt, now)
+  );
 
   const weekRange = currentWeekRange(now);
   const weeklyBookCount = await countBookClientsCreatedInRange(weekRange.start, weekRange.end);
@@ -129,6 +147,24 @@ export default async function DashboardPage({
       status: "CALLBACK" as ClientStatus,
       reasonLabel: `Callback at ${formatTimeOnly(cb.scheduledAt)}`,
       sortKey: cb.scheduledAt,
+    })),
+    ...neverCalled15Day.map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      href: `/clients/${c.id}`,
+      status: c.status,
+      reasonLabel: `New lead, never called (day ${daysSince(c.firstSaleDate, now) + 1})`,
+      sortKey: "",
+    })),
+    ...neverCalledBook.map((c) => ({
+      id: c.id,
+      name: [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unnamed",
+      phone: c.phone ?? "—",
+      href: `/book/${c.id}`,
+      status: c.status,
+      reasonLabel: `New lead, never called (day ${daysSince(c.createdAt, now) + 1})`,
+      sortKey: "",
     })),
   ].sort((a, b) => (a.sortKey && b.sortKey ? a.sortKey.localeCompare(b.sortKey) : a.name.localeCompare(b.name)));
 
@@ -422,7 +458,7 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Link
           href="/follow-up"
           className="block rounded-lg border border-border bg-card p-5 transition-[border-color,box-shadow] hover:border-gold hover:shadow-sm"
@@ -445,6 +481,19 @@ export default async function DashboardPage({
           <p className="mt-1 text-sm text-muted-foreground">Your full existing client book.</p>
           <p className="mt-3 text-2xl font-semibold text-gold">
             {bookCount} <span className="text-sm font-normal text-muted-foreground">clients</span>
+          </p>
+        </Link>
+
+        <Link
+          href="/reactivate"
+          className="block rounded-lg border border-border bg-card p-5 transition-[border-color,box-shadow] hover:border-gold hover:shadow-sm"
+        >
+          <h2 className="font-display text-lg font-semibold text-foreground">Reactivate</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Clients you haven&apos;t spoken to in {DORMANT_DAYS}+ days.
+          </p>
+          <p className="mt-3 text-2xl font-semibold text-gold">
+            {dormantCount} <span className="text-sm font-normal text-muted-foreground">dormant</span>
           </p>
         </Link>
       </div>

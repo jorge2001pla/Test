@@ -96,10 +96,18 @@ async function ensureSchema(): Promise<void> {
     );
   `);
 
-  // book_clients already existed before secondary_phone was added — CREATE TABLE IF NOT EXISTS
-  // above is a no-op against that existing table, so the column needs an explicit ALTER.
+  // book_clients already existed before these columns were added — CREATE TABLE IF NOT EXISTS
+  // above is a no-op against that existing table, so each needs an explicit ALTER.
+  await addColumnIfMissing("book_clients", "secondary_phone", "TEXT");
+  // Default 'import' so every pre-existing row (bulk-loaded from the old Master List, whose
+  // created_at is just "when it was imported," not a real intake date) is excluded from the
+  // never-called-yet nudge; createBookClient explicitly overrides this to 'manual' going forward.
+  await addColumnIfMissing("book_clients", "source", "TEXT NOT NULL DEFAULT 'import'");
+}
+
+async function addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {
   try {
-    await db.execute("ALTER TABLE book_clients ADD COLUMN secondary_phone TEXT");
+    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (!/duplicate column/i.test(message)) throw err;

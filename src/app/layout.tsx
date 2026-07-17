@@ -7,6 +7,7 @@ import ThemeScript from "@/components/ThemeScript";
 import ThemeToggle from "@/components/ThemeToggle";
 import SpotPriceTicker from "@/components/SpotPriceTicker";
 import SalesQuoteBanner from "@/components/SalesQuoteBanner";
+import SettingsMenu from "@/components/SettingsMenu";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,7 +37,6 @@ const NAV_LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/follow-up", label: "50% Follow-Up" },
   { href: "/book", label: "Clients" },
-  { href: "/import", label: "Import" },
 ];
 
 export default function RootLayout({
@@ -85,6 +85,7 @@ export default function RootLayout({
 
             <div className="ml-auto flex items-center gap-4">
               <SpotPriceTicker />
+              <SettingsMenu />
               <ThemeToggle />
             </div>
           </nav>

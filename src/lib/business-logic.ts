@@ -14,6 +14,13 @@ function daysBetween(from: Date, to: Date): number {
   return Math.floor(ms / 86_400_000);
 }
 
+/** Whole days between a stored date/datetime string's calendar date and `now`. Only the date
+ * portion is used (safe for both plain dates and local datetime strings) to match the same
+ * UTC-midnight diffing the 15-day window math relies on. */
+export function daysSince(dateOrDateTime: string, now: Date = new Date()): number {
+  return daysBetween(new Date(dateOrDateTime.slice(0, 10)), now);
+}
+
 /** YYYY-MM-DDTHH:MM:SS in local wall-clock time — for timestamping "now" without SQLite's
  * datetime('now') UTC default, which can land on the wrong calendar day for the user's timezone. */
 export function localDateTimeString(d: Date = new Date()): string {
@@ -239,4 +246,21 @@ export function findMissedCallbacks<T extends CallbackLike>(clients: T[], now: D
   return clients
     .filter((c) => c.status === "CALLBACK" && !!c.callbackScheduledAt && c.callbackScheduledAt < todayStart)
     .sort((a, b) => (a.callbackScheduledAt as string).localeCompare(b.callbackScheduledAt as string));
+}
+
+/** How long a fresh, never-called lead gets proactively surfaced on Today's Priority. */
+export const NEVER_CALLED_WINDOW_DAYS = 5;
+
+/** How many days since the last logged call before a book client counts as dormant/reactivation-worthy. */
+export const DORMANT_DAYS = 30;
+
+/**
+ * True for the first few days after intake (first sale date for 15-day clients, created date for
+ * book clients) — the window during which a never-called lead is still hot enough to deserve a
+ * proactive nudge on Today's Priority, rather than waiting for a deadline (day 15) that may not
+ * even exist for this record type.
+ */
+export function isWithinNeverCalledWindow(intakeDate: string, now: Date = new Date()): boolean {
+  const since = daysBetween(new Date(intakeDate), now);
+  return since >= 0 && since <= NEVER_CALLED_WINDOW_DAYS;
 }
