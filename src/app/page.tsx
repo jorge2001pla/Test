@@ -277,6 +277,17 @@ export default async function DashboardPage({
       </div>
 
       <div>
+        <MonthCalendar
+          year={year}
+          month={month}
+          todayDate={localDateString(now)}
+          callbacksByDay={callbacksByDay}
+          prevHref={prevMonthHref}
+          nextHref={nextMonthHref}
+        />
+      </div>
+
+      <div>
         <h2 className="font-display text-lg font-semibold text-foreground">Shipments</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Personal client orders that have shipped, waiting on your shipped/delivered calls.
@@ -436,17 +447,6 @@ export default async function DashboardPage({
             {bookCount} <span className="text-sm font-normal text-muted-foreground">clients</span>
           </p>
         </Link>
-      </div>
-
-      <div>
-        <MonthCalendar
-          year={year}
-          month={month}
-          todayDate={localDateString(now)}
-          callbacksByDay={callbacksByDay}
-          prevHref={prevMonthHref}
-          nextHref={nextMonthHref}
-        />
       </div>
     </div>
   );
