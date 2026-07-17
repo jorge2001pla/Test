@@ -22,6 +22,7 @@ import {
   isWithinNeverCalledWindow,
   localDateString,
   recentWeekRanges,
+  remainingWorkdays,
   TREND_WEEKS,
   WEEKLY_GOAL,
 } from "@/lib/business-logic";
@@ -33,6 +34,8 @@ import ShipmentActions from "@/components/ShipmentActions";
 import ReminderItem from "@/components/ReminderItem";
 import NoteItem from "@/components/NoteItem";
 import WeeklyTrendChart from "@/components/WeeklyTrendChart";
+import QuickLogCall from "@/components/QuickLogCall";
+import PhoneLink from "@/components/PhoneLink";
 import { createReminderAction, createNoteAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +54,7 @@ interface PriorityRow {
   sortKey: string;
   /** 0 = due today (callback/window), 1 = never-called nudge, 2 = backlog fill (padding). */
   tier: number;
+  kind: "client" | "book";
 }
 
 interface OverdueRow {
@@ -156,6 +160,7 @@ export default async function DashboardPage({
               : "",
       sortKey: row.callbackScheduledAt ?? "",
       tier: 0,
+      kind: "client" as const,
     })),
     ...todaysBookCallbacks.map((cb) => ({
       id: cb.bookClientId,
@@ -166,6 +171,7 @@ export default async function DashboardPage({
       reasonLabel: `Callback at ${formatTimeOnly(cb.scheduledAt)}`,
       sortKey: cb.scheduledAt,
       tier: 0,
+      kind: "book" as const,
     })),
     ...neverCalled15Day.map((c) => ({
       id: c.id,
@@ -176,6 +182,7 @@ export default async function DashboardPage({
       reasonLabel: `Never called — ${daysLeftInWindow(c.firstSaleDate, now)} day${daysLeftInWindow(c.firstSaleDate, now) === 1 ? "" : "s"} left`,
       sortKey: "",
       tier: 1,
+      kind: "client" as const,
     })),
     ...neverCalledBook.map((c) => ({
       id: c.id,
@@ -186,6 +193,7 @@ export default async function DashboardPage({
       reasonLabel: `New lead, never called (day ${daysSince(c.createdAt, now) + 1})`,
       sortKey: "",
       tier: 1,
+      kind: "book" as const,
     })),
   ];
 
@@ -206,6 +214,7 @@ export default async function DashboardPage({
           : "Backlog — never contacted",
       sortKey: "",
       tier: 2,
+      kind: "book" as const,
     }));
 
   const priorityRows: PriorityRow[] = [...dueTodayRows, ...backlogRows].sort((a, b) => {
@@ -246,6 +255,14 @@ export default async function DashboardPage({
   const prevMonthHref = `/?month=${monthParam(prevMonthDate.getFullYear(), prevMonthDate.getMonth())}`;
 
   const weeklyPct = Math.min(100, Math.round((weeklyBookCount / WEEKLY_GOAL) * 100));
+  const weeklyRemaining = Math.max(0, WEEKLY_GOAL - weeklyBookCount);
+  const workdaysLeft = remainingWorkdays(now, weekRange.end);
+  const paceLabel =
+    weeklyRemaining === 0
+      ? "Goal hit for the week."
+      : workdaysLeft === 0
+        ? `${weeklyRemaining} short of goal with no workdays left this week.`
+        : `Need ${weeklyRemaining} more by Wed — about ${Math.ceil(weeklyRemaining / workdaysLeft)}/day.`;
 
   return (
     <div className="space-y-6">
@@ -281,6 +298,7 @@ export default async function DashboardPage({
             <div className="h-full rounded-full bg-gold" style={{ width: `${weeklyPct}%` }} />
           </div>
         </div>
+        <p className="mt-2 text-sm text-muted-foreground">{paceLabel}</p>
         <WeeklyTrendChart weeks={trendWeeks} goal={WEEKLY_GOAL} />
       </div>
 
@@ -301,6 +319,9 @@ export default async function DashboardPage({
                 >
                   {row.name}
                 </Link>
+                <span className="text-muted-foreground">
+                  <PhoneLink phone={row.phone} />
+                </span>
                 <span className="text-red-600 dark:text-red-400">{row.reasonLabel}</span>
               </li>
             ))}
@@ -332,6 +353,7 @@ export default async function DashboardPage({
                       <th className="px-4 py-2">Phone</th>
                       <th className="px-4 py-2">Why Today</th>
                       <th className="px-4 py-2">Status</th>
+                      <th className="px-4 py-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -345,7 +367,9 @@ export default async function DashboardPage({
                             {row.name}
                           </Link>
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">{row.phone}</td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          <PhoneLink phone={row.phone} />
+                        </td>
                         <td
                           className={
                             row.tier === 2 ? "px-4 py-3 text-muted-foreground" : "px-4 py-3 text-foreground"
@@ -355,6 +379,9 @@ export default async function DashboardPage({
                         </td>
                         <td className="px-4 py-3">
                           <StatusBadge status={row.status} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <QuickLogCall id={row.id} kind={row.kind} />
                         </td>
                       </tr>
                     ))}
@@ -420,7 +447,9 @@ export default async function DashboardPage({
                           {s.clientName}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{s.clientPhone ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        <PhoneLink phone={s.clientPhone} />
+                      </td>
                       <td className="px-4 py-3 text-foreground">
                         {s.carrier} — {s.trackingNumber}
                       </td>

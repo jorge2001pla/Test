@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { createBookClientAction } from "@/app/actions";
+import { listBookClients } from "@/lib/book";
+import NameFieldsWithDuplicateCheck from "@/components/NameFieldsWithDuplicateCheck";
 
 const inputClass =
   "w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none";
@@ -11,6 +13,11 @@ export default async function NewBookClientPage({
 }) {
   const { existing } = await searchParams;
   const isExisting = existing === "1";
+
+  const existingClients = await listBookClients();
+  const existingNames = existingClients
+    .map((c) => `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim().toLowerCase())
+    .filter(Boolean);
 
   return (
     <div className="max-w-xl">
@@ -28,20 +35,7 @@ export default async function NewBookClientPage({
       </p>
 
       <form action={createBookClientAction} className="mt-6 space-y-4">
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <label className="mb-1 block text-sm text-muted-foreground" htmlFor="firstName">
-              First Name
-            </label>
-            <input id="firstName" name="firstName" type="text" className={inputClass} />
-          </div>
-          <div className="flex-1">
-            <label className="mb-1 block text-sm text-muted-foreground" htmlFor="lastName">
-              Last Name
-            </label>
-            <input id="lastName" name="lastName" type="text" className={inputClass} />
-          </div>
-        </div>
+        <NameFieldsWithDuplicateCheck existingNames={existingNames} />
 
         <div className="flex gap-4">
           <div className="flex-1">

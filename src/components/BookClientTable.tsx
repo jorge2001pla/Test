@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
+import PhoneLink from "@/components/PhoneLink";
 import type { ClientStatus } from "@/lib/types";
 
 export interface BookClientRow {
@@ -65,8 +66,12 @@ export default function BookClientTable({ clients }: { clients: BookClientRow[] 
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{c.email ?? "—"}</td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {c.phone ?? "—"}
-                    {c.secondaryPhone && <div className="text-xs">{c.secondaryPhone} (secondary)</div>}
+                    <PhoneLink phone={c.phone} />
+                    {c.secondaryPhone && (
+                      <div className="text-xs">
+                        <PhoneLink phone={c.secondaryPhone} /> (secondary)
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={c.status} />

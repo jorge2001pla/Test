@@ -11,6 +11,7 @@ import {
 import StatusBadge from "@/components/StatusBadge";
 import AddToBookToggle from "@/components/AddToBookToggle";
 import CallbackScheduleFields from "@/components/CallbackScheduleFields";
+import PhoneLink from "@/components/PhoneLink";
 import { addCallLogAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,9 @@ export default async function ClientDetailPage({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-xl font-semibold text-foreground">{client.name}</h1>
-            <p className="text-sm text-muted-foreground">{client.phone}</p>
+            <p className="text-sm text-muted-foreground">
+              <PhoneLink phone={client.phone} />
+            </p>
           </div>
           <StatusBadge status={client.status} />
         </div>

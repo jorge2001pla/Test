@@ -7,6 +7,7 @@ import { suggestsFallbackPitch } from "@/lib/business-logic";
 import StatusBadge from "@/components/StatusBadge";
 import CallbackScheduleFields from "@/components/CallbackScheduleFields";
 import ShipmentActions from "@/components/ShipmentActions";
+import PhoneLink from "@/components/PhoneLink";
 import { addBookCallLogAction, createShipmentAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -36,9 +37,13 @@ export default async function BookClientDetailPage({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-xl font-semibold text-foreground">{name}</h1>
-            <p className="text-sm text-muted-foreground">{client.phone ?? "—"}</p>
+            <p className="text-sm text-muted-foreground">
+              <PhoneLink phone={client.phone} />
+            </p>
             {client.secondaryPhone && (
-              <p className="text-sm text-muted-foreground">{client.secondaryPhone} (secondary)</p>
+              <p className="text-sm text-muted-foreground">
+                <PhoneLink phone={client.secondaryPhone} /> (secondary)
+              </p>
             )}
             {client.email && <p className="text-sm text-muted-foreground">{client.email}</p>}
           </div>

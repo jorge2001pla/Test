@@ -274,3 +274,41 @@ export async function deleteNoteAction(id: string): Promise<void> {
   await deleteNote(id);
   revalidatePath("/");
 }
+
+export interface QuickCallInput {
+  id: string;
+  noteText: string;
+  resultingStatus: ClientStatus;
+  callbackDate?: string;
+  callbackTime?: string;
+}
+
+function callbackScheduledAtFrom(input: QuickCallInput): string | null {
+  return input.resultingStatus === "CALLBACK" && input.callbackDate && input.callbackTime
+    ? `${input.callbackDate}T${input.callbackTime}`
+    : null;
+}
+
+/** Same as addCallLogAction but doesn't redirect — for logging a call inline from the Dashboard
+ * without navigating away from the call queue. */
+export async function quickLogCallAction(input: QuickCallInput): Promise<void> {
+  const noteText = input.noteText.trim();
+  if (!input.id || !noteText) {
+    throw new Error("A call note is required.");
+  }
+  await addCallLogEntry(input.id, noteText, input.resultingStatus, callbackScheduledAtFrom(input));
+  revalidatePath("/");
+  revalidatePath(`/clients/${input.id}`);
+}
+
+/** Book-client counterpart to quickLogCallAction. */
+export async function quickLogBookCallAction(input: QuickCallInput): Promise<void> {
+  const noteText = input.noteText.trim();
+  if (!input.id || !noteText) {
+    throw new Error("A call note is required.");
+  }
+  await addBookCallLogEntry(input.id, noteText, input.resultingStatus, callbackScheduledAtFrom(input));
+  revalidatePath("/");
+  revalidatePath(`/book/${input.id}`);
+  revalidatePath("/book");
+}

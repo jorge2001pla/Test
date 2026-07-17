@@ -231,6 +231,20 @@ export function weekRangeFor(now: Date, weeksAgo: number = 0): WeekRange {
   };
 }
 
+/** Count of Monday–Friday calendar days from `now` (inclusive, if a workday) up to but not
+ * including `weekEndIso` — used to translate the remaining weekly goal into a daily pace. */
+export function remainingWorkdays(now: Date, weekEndIso: string): number {
+  const end = new Date(`${weekEndIso.slice(0, 10)}T00:00:00`);
+  const cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let count = 0;
+  while (cursor < end) {
+    const day = cursor.getDay();
+    if (day >= 1 && day <= 5) count++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
+}
+
 /** The current goal-tracking week, as of `now`. */
 export function currentWeekRange(now: Date = new Date()): WeekRange {
   return weekRangeFor(now, 0);
