@@ -240,16 +240,3 @@ export function findMissedCallbacks<T extends CallbackLike>(clients: T[], now: D
     .filter((c) => c.status === "CALLBACK" && !!c.callbackScheduledAt && c.callbackScheduledAt < todayStart)
     .sort((a, b) => (a.callbackScheduledAt as string).localeCompare(b.callbackScheduledAt as string));
 }
-
-/**
- * 15-day clients whose window has expired (day 16+) without a Sold/Not Interested outcome ever
- * being logged — the normal Follow-Up view intentionally drops these once the window lapses, so
- * this is the one place they still surface as "needs a decision."
- */
-export function findExpiredUnresolved<T extends ClientLike>(clients: T[], now: Date = new Date()): T[] {
-  return clients
-    .filter(
-      (c) => c.status !== "SOLD" && c.status !== "NOT_INTERESTED" && isWindowExpired(c.firstSaleDate, now)
-    )
-    .sort((a, b) => a.firstSaleDate.localeCompare(b.firstSaleDate));
-}

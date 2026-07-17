@@ -19,6 +19,8 @@ import {
   CARRIERS,
   type Carrier,
 } from "@/lib/shipments";
+import { createReminder, deleteReminder, setReminderDone } from "@/lib/reminders";
+import { createNote, deleteNote } from "@/lib/notes";
 import type { ClientStatus } from "@/lib/types";
 import { CLIENT_STATUSES } from "@/lib/types";
 
@@ -231,4 +233,42 @@ export async function setDeliveredCallDoneAction(
   await setDeliveredCallDone(shipmentId, done);
   revalidatePath("/");
   revalidatePath(`/book/${bookClientId}`);
+}
+
+export async function createReminderAction(formData: FormData): Promise<void> {
+  const text = String(formData.get("text") ?? "").trim();
+  const dueDate = String(formData.get("dueDate") ?? "").trim();
+
+  if (!text) {
+    throw new Error("Reminder text is required.");
+  }
+
+  await createReminder(text, dueDate || null);
+  revalidatePath("/");
+}
+
+export async function setReminderDoneAction(id: string, done: boolean): Promise<void> {
+  await setReminderDone(id, done);
+  revalidatePath("/");
+}
+
+export async function deleteReminderAction(id: string): Promise<void> {
+  await deleteReminder(id);
+  revalidatePath("/");
+}
+
+export async function createNoteAction(formData: FormData): Promise<void> {
+  const text = String(formData.get("text") ?? "").trim();
+
+  if (!text) {
+    throw new Error("Note text is required.");
+  }
+
+  await createNote(text);
+  revalidatePath("/");
+}
+
+export async function deleteNoteAction(id: string): Promise<void> {
+  await deleteNote(id);
+  revalidatePath("/");
 }

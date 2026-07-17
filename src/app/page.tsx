@@ -2,11 +2,12 @@ import Link from "next/link";
 import { listClientsWithLastCallNote, listScheduledCallbacks } from "@/lib/clients";
 import { listBookClients, listScheduledBookCallbacks, countBookClientsCreatedInRange } from "@/lib/book";
 import { listActiveShipments } from "@/lib/shipments";
+import { listActiveReminders } from "@/lib/reminders";
+import { listNotes } from "@/lib/notes";
 import {
   buildFollowUpSections,
   buildTodaysPriority,
   currentWeekRange,
-  findExpiredUnresolved,
   findMissedCallbacks,
   localDateString,
   WEEKLY_GOAL,
@@ -16,6 +17,9 @@ import type { ClientStatus } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import MonthCalendar, { type CalendarCallback } from "@/components/MonthCalendar";
 import ShipmentActions from "@/components/ShipmentActions";
+import ReminderItem from "@/components/ReminderItem";
+import NoteItem from "@/components/NoteItem";
+import { createReminderAction, createNoteAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -70,7 +74,6 @@ export default async function DashboardPage({
 
   const missedClientCallbacks = findMissedCallbacks(clients, now);
   const missedBookCallbacks = findMissedCallbacks(bookClients, now);
-  const expiredUnresolved = findExpiredUnresolved(clients, now);
 
   const overdueRows: OverdueRow[] = [
     ...missedClientCallbacks.map((c) => ({
@@ -89,14 +92,6 @@ export default async function DashboardPage({
       status: c.status,
       reasonLabel: `Missed callback — was ${formatCallbackTime(c.callbackScheduledAt)}`,
     })),
-    ...expiredUnresolved.map((c) => ({
-      id: c.id,
-      name: c.name,
-      phone: c.phone,
-      href: `/clients/${c.id}`,
-      status: c.status,
-      reasonLabel: `Window expired, never resolved — first sale ${formatDate(c.firstSaleDate)}`,
-    })),
   ];
 
   const today = localDateString(now);
@@ -104,6 +99,10 @@ export default async function DashboardPage({
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const todayEnd = `${localDateString(tomorrow)}T00:00`;
   const todaysBookCallbacks = await listScheduledBookCallbacks(todayStart, todayEnd);
+
+  const reminders = await listActiveReminders();
+  const notes = await listNotes();
+  const overdueReminders = reminders.filter((r) => r.dueAt && r.dueAt < today);
 
   const priorityRows: PriorityRow[] = [
     ...todaysWindowAndCallbacks.map((row) => ({
@@ -203,46 +202,30 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      {overdueRows.length > 0 && (
-        <div>
+      {(overdueRows.length > 0 || overdueReminders.length > 0) && (
+        <div className="rounded-lg border border-red-600/40 bg-card p-5 dark:border-red-400/40">
           <h2 className="font-display text-lg font-semibold text-red-600 dark:text-red-400">
             Overdue
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Callbacks that passed without a call, and 15-day windows that closed without a final
-            dispo. Nothing here should be left overlooked.
+            Callbacks that passed without a call, and reminders you set that came due.
           </p>
-          <div className="mt-4 overflow-x-auto rounded-lg border border-red-600/40 bg-card dark:border-red-400/40">
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-background text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2">Client</th>
-                  <th className="px-4 py-2">Phone</th>
-                  <th className="px-4 py-2">Why</th>
-                  <th className="px-4 py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {overdueRows.map((row) => (
-                  <tr key={`${row.href}-${row.reasonLabel}`} className="hover:bg-gold/5">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={row.href}
-                        className="font-medium text-foreground hover:text-gold hover:underline"
-                      >
-                        {row.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{row.phone}</td>
-                    <td className="px-4 py-3 text-foreground">{row.reasonLabel}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={row.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="mt-3 divide-y divide-border">
+            {overdueRows.map((row) => (
+              <li key={`${row.href}-${row.reasonLabel}`} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <Link
+                  href={row.href}
+                  className="font-medium text-foreground hover:text-gold hover:underline"
+                >
+                  {row.name}
+                </Link>
+                <span className="text-red-600 dark:text-red-400">{row.reasonLabel}</span>
+              </li>
+            ))}
+            {overdueReminders.map((r) => (
+              <ReminderItem key={r.id} id={r.id} text={r.text} dueAt={r.dueAt} overdue />
+            ))}
+          </ul>
         </div>
       )}
 
@@ -351,6 +334,79 @@ export default async function DashboardPage({
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h2 className="font-display text-lg font-semibold text-foreground">Reminders</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Anything you need to remember — check it off when it&apos;s done.
+          </p>
+          <form action={createReminderAction} className="mt-3 flex flex-wrap items-end gap-2">
+            <input
+              name="text"
+              type="text"
+              placeholder="e.g. Call the coin show organizer"
+              required
+              className="min-w-[10rem] flex-1 rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
+            />
+            <input
+              name="dueDate"
+              type="date"
+              className="rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="rounded bg-gold px-3 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
+            >
+              Add
+            </button>
+          </form>
+          {reminders.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No reminders set.</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-border">
+              {reminders.map((r) => (
+                <ReminderItem
+                  key={r.id}
+                  id={r.id}
+                  text={r.text}
+                  dueAt={r.dueAt}
+                  overdue={!!r.dueAt && r.dueAt < today}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h2 className="font-display text-lg font-semibold text-foreground">Notes</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Quick scratchpad — jot anything down.</p>
+          <form action={createNoteAction} className="mt-3 space-y-2">
+            <textarea
+              name="text"
+              rows={2}
+              placeholder="Type a note..."
+              required
+              className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="rounded bg-gold px-3 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
+            >
+              Add Note
+            </button>
+          </form>
+          {notes.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No notes yet.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {notes.map((n) => (
+                <NoteItem key={n.id} id={n.id} text={n.text} createdAt={n.createdAt} />
+              ))}
+            </ul>
           )}
         </div>
       </div>

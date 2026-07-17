@@ -80,6 +80,20 @@ async function ensureSchema(): Promise<void> {
     );
 
     CREATE INDEX IF NOT EXISTS idx_call_log_client ON call_log_entries(client_id);
+
+    CREATE TABLE IF NOT EXISTS reminders (
+      id TEXT PRIMARY KEY,
+      text TEXT NOT NULL,
+      due_at TEXT,
+      done INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      text TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
 
