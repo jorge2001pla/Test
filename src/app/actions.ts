@@ -133,6 +133,29 @@ export async function importClientsAction(rows: ImportRow[]): Promise<{ imported
   return { imported };
 }
 
+export async function createBookClientAction(formData: FormData): Promise<void> {
+  const firstName = String(formData.get("firstName") ?? "").trim();
+  const lastName = String(formData.get("lastName") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!firstName && !lastName) {
+    throw new Error("Name is required.");
+  }
+
+  const bookClient = await createBookClient({
+    firstName: firstName || null,
+    lastName: lastName || null,
+    phone: phone || null,
+    email: email || null,
+    notes: notes || null,
+  });
+  revalidatePath("/");
+  revalidatePath("/book");
+  redirect(`/book/${bookClient.id}`);
+}
+
 export async function addClientToBookAction(clientId: string): Promise<void> {
   const client = await getClient(clientId);
   if (!client) throw new Error("Client not found");

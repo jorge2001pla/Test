@@ -1,9 +1,17 @@
 import Link from "next/link";
 import { listClientsWithLastCallNote, listScheduledCallbacks } from "@/lib/clients";
-import { listBookClients, listScheduledBookCallbacks } from "@/lib/book";
+import { listBookClients, listScheduledBookCallbacks, countBookClientsCreatedInRange } from "@/lib/book";
 import { listActiveShipments } from "@/lib/shipments";
-import { buildFollowUpSections, buildTodaysPriority, localDateString } from "@/lib/business-logic";
-import { formatDate, formatTimeOnly } from "@/lib/format";
+import {
+  buildFollowUpSections,
+  buildTodaysPriority,
+  currentWeekRange,
+  findExpiredUnresolved,
+  findMissedCallbacks,
+  localDateString,
+  WEEKLY_GOAL,
+} from "@/lib/business-logic";
+import { formatCallbackTime, formatDate, formatTimeOnly } from "@/lib/format";
 import type { ClientStatus } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import MonthCalendar, { type CalendarCallback } from "@/components/MonthCalendar";
@@ -25,6 +33,15 @@ interface PriorityRow {
   sortKey: string;
 }
 
+interface OverdueRow {
+  id: string;
+  name: string;
+  phone: string;
+  href: string;
+  status: ClientStatus;
+  reasonLabel: string;
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -43,9 +60,44 @@ export default async function DashboardPage({
 
   const clients = await listClientsWithLastCallNote();
   const sections = buildFollowUpSections(clients);
-  const bookCount = (await listBookClients()).length;
+  const bookClients = await listBookClients();
+  const bookCount = bookClients.length;
   const todaysWindowAndCallbacks = buildTodaysPriority(clients, now);
   const activeShipments = await listActiveShipments();
+
+  const weekRange = currentWeekRange(now);
+  const weeklyBookCount = await countBookClientsCreatedInRange(weekRange.start, weekRange.end);
+
+  const missedClientCallbacks = findMissedCallbacks(clients, now);
+  const missedBookCallbacks = findMissedCallbacks(bookClients, now);
+  const expiredUnresolved = findExpiredUnresolved(clients, now);
+
+  const overdueRows: OverdueRow[] = [
+    ...missedClientCallbacks.map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      href: `/clients/${c.id}`,
+      status: c.status,
+      reasonLabel: `Missed callback — was ${formatCallbackTime(c.callbackScheduledAt)}`,
+    })),
+    ...missedBookCallbacks.map((c) => ({
+      id: c.id,
+      name: [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unnamed",
+      phone: c.phone ?? "—",
+      href: `/book/${c.id}`,
+      status: c.status,
+      reasonLabel: `Missed callback — was ${formatCallbackTime(c.callbackScheduledAt)}`,
+    })),
+    ...expiredUnresolved.map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      href: `/clients/${c.id}`,
+      status: c.status,
+      reasonLabel: `Window expired, never resolved — first sale ${formatDate(c.firstSaleDate)}`,
+    })),
+  ];
 
   const today = localDateString(now);
   const todayStart = `${today}T00:00`;
@@ -113,14 +165,86 @@ export default async function DashboardPage({
   const nextMonthHref = `/?month=${monthParam(nextMonthDate.getFullYear(), nextMonthDate.getMonth())}`;
   const prevMonthHref = `/?month=${monthParam(prevMonthDate.getFullYear(), prevMonthDate.getMonth())}`;
 
+  const weeklyPct = Math.min(100, Math.round((weeklyBookCount / WEEKLY_GOAL) * 100));
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold text-foreground">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Today: {formatDate(new Date().toISOString())}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-semibold text-foreground">Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Today: {formatDate(new Date().toISOString())}
+          </p>
+        </div>
+        <Link
+          href="/book/new"
+          className="rounded bg-gold px-4 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
+        >
+          + Log New Account
+        </Link>
       </div>
+
+      <div className="rounded-lg border border-border bg-card p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-lg font-semibold text-foreground">Weekly Goal</h2>
+          <span className="text-xs text-muted-foreground">{weekRange.label}</span>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          New book clients this week — direct sales and 50% conversions both count.
+        </p>
+        <div className="mt-3 flex items-center gap-4">
+          <p className="text-2xl font-semibold text-gold">
+            {weeklyBookCount}
+            <span className="text-sm font-normal text-muted-foreground"> / {WEEKLY_GOAL}</span>
+          </p>
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
+            <div className="h-full rounded-full bg-gold" style={{ width: `${weeklyPct}%` }} />
+          </div>
+        </div>
+      </div>
+
+      {overdueRows.length > 0 && (
+        <div>
+          <h2 className="font-display text-lg font-semibold text-red-600 dark:text-red-400">
+            Overdue
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Callbacks that passed without a call, and 15-day windows that closed without a final
+            dispo. Nothing here should be left overlooked.
+          </p>
+          <div className="mt-4 overflow-x-auto rounded-lg border border-red-600/40 bg-card dark:border-red-400/40">
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="bg-background text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2">Client</th>
+                  <th className="px-4 py-2">Phone</th>
+                  <th className="px-4 py-2">Why</th>
+                  <th className="px-4 py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {overdueRows.map((row) => (
+                  <tr key={`${row.href}-${row.reasonLabel}`} className="hover:bg-gold/5">
+                    <td className="px-4 py-3">
+                      <Link
+                        href={row.href}
+                        className="font-medium text-foreground hover:text-gold hover:underline"
+                      >
+                        {row.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{row.phone}</td>
+                    <td className="px-4 py-3 text-foreground">{row.reasonLabel}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={row.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div>
         <h2 className="font-display text-lg font-semibold text-foreground">Today&apos;s Priority</h2>

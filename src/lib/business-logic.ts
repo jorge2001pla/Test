@@ -1,6 +1,9 @@
-import type { Client } from "./types";
+import type { Client, ClientStatus } from "./types";
 
 const WINDOW_DAYS = 15;
+
+/** Starting weekly target for new book clients (Thursday–Wednesday week). Bump this as the goal grows. */
+export const WEEKLY_GOAL = 10;
 
 function toMidnightUTC(date: Date): number {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
@@ -193,4 +196,60 @@ export function buildTodaysPriority<T extends ClientLike>(
     if (b.callbackScheduledAt) return 1;
     return a.client.name.localeCompare(b.client.name);
   });
+}
+
+export interface WeekRange {
+  /** Local YYYY-MM-DDTHH:MM:SS, inclusive start (Thursday 00:00). */
+  start: string;
+  /** Local YYYY-MM-DDTHH:MM:SS, exclusive end (following Thursday 00:00). */
+  end: string;
+  label: string;
+}
+
+const SHORT_DATE = { month: "short", day: "numeric" } as const;
+
+/**
+ * The current goal-tracking week, running Thursday through Wednesday (per how this business
+ * measures its week), as of `now`.
+ */
+export function currentWeekRange(now: Date = new Date()): WeekRange {
+  const daysSinceThursday = (now.getDay() - 4 + 7) % 7;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceThursday);
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+  const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
+  return {
+    start: `${localDateString(start)}T00:00:00`,
+    end: `${localDateString(end)}T00:00:00`,
+    label: `${start.toLocaleDateString(undefined, SHORT_DATE)} – ${lastDay.toLocaleDateString(undefined, SHORT_DATE)}`,
+  };
+}
+
+interface CallbackLike {
+  status: ClientStatus;
+  callbackScheduledAt: string | null;
+}
+
+/**
+ * Clients/book-clients still marked Callback whose scheduled time has already passed without a
+ * follow-up call being logged — these would otherwise silently vanish from "Today's Priority"
+ * the moment the day rolls over, so they need their own always-visible list.
+ */
+export function findMissedCallbacks<T extends CallbackLike>(clients: T[], now: Date = new Date()): T[] {
+  const todayStart = `${localDateString(now)}T00:00`;
+  return clients
+    .filter((c) => c.status === "CALLBACK" && !!c.callbackScheduledAt && c.callbackScheduledAt < todayStart)
+    .sort((a, b) => (a.callbackScheduledAt as string).localeCompare(b.callbackScheduledAt as string));
+}
+
+/**
+ * 15-day clients whose window has expired (day 16+) without a Sold/Not Interested outcome ever
+ * being logged — the normal Follow-Up view intentionally drops these once the window lapses, so
+ * this is the one place they still surface as "needs a decision."
+ */
+export function findExpiredUnresolved<T extends ClientLike>(clients: T[], now: Date = new Date()): T[] {
+  return clients
+    .filter(
+      (c) => c.status !== "SOLD" && c.status !== "NOT_INTERESTED" && isWindowExpired(c.firstSaleDate, now)
+    )
+    .sort((a, b) => a.firstSaleDate.localeCompare(b.firstSaleDate));
 }

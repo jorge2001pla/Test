@@ -90,18 +90,39 @@ export interface NewBookClientInput {
   firstName?: string | null;
   lastName?: string | null;
   phone?: string | null;
+  notes?: string | null;
 }
 
 export async function createBookClient(input: NewBookClientInput): Promise<BookClient> {
   await ready();
   const id = randomUUID();
+  const createdAt = localDateTimeString();
   await db.execute({
-    sql: `INSERT INTO book_clients (id, email, first_name, last_name, phone)
-          VALUES (?, ?, ?, ?, ?)`,
-    args: [id, input.email ?? null, input.firstName ?? null, input.lastName ?? null, input.phone ?? null],
+    sql: `INSERT INTO book_clients (id, email, first_name, last_name, phone, notes, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      input.email ?? null,
+      input.firstName ?? null,
+      input.lastName ?? null,
+      input.phone ?? null,
+      input.notes ?? null,
+      createdAt,
+      createdAt,
+    ],
   });
   const res = await db.execute({ sql: "SELECT * FROM book_clients WHERE id = ?", args: [id] });
   return mapBookClient(res.rows[0] as unknown as BookClientRowDb);
+}
+
+/** Count of book clients created within [startIso, endIso) — used for the weekly new-client goal. */
+export async function countBookClientsCreatedInRange(startIso: string, endIso: string): Promise<number> {
+  await ready();
+  const res = await db.execute({
+    sql: "SELECT COUNT(*) as cnt FROM book_clients WHERE created_at >= ? AND created_at < ?",
+    args: [startIso, endIso],
+  });
+  return Number((res.rows[0] as unknown as { cnt: number | string }).cnt);
 }
 
 export async function deleteBookClient(id: string): Promise<void> {
