@@ -12,9 +12,11 @@ import {
   buildFollowUpSections,
   buildTodaysPriority,
   currentWeekRange,
+  daysLeftInWindow,
   DORMANT_DAYS,
   daysSince,
   findMissedCallbacks,
+  isNearingExpiryUncalled,
   isWithinNeverCalledWindow,
   localDateString,
   WEEKLY_GOAL,
@@ -81,7 +83,7 @@ export default async function DashboardPage({
   ).length;
 
   const neverCalled15Day = clients.filter(
-    (c) => c.lastCallNote === null && isWithinNeverCalledWindow(c.firstSaleDate, now)
+    (c) => c.lastCallNote === null && isNearingExpiryUncalled(c.firstSaleDate, now)
   );
   const neverCalledBook = bookClients.filter(
     (c) => c.source === "manual" && c.lastContactAt === null && isWithinNeverCalledWindow(c.createdAt, now)
@@ -154,7 +156,7 @@ export default async function DashboardPage({
       phone: c.phone,
       href: `/clients/${c.id}`,
       status: c.status,
-      reasonLabel: `New lead, never called (day ${daysSince(c.firstSaleDate, now) + 1})`,
+      reasonLabel: `Never called — ${daysLeftInWindow(c.firstSaleDate, now)} day${daysLeftInWindow(c.firstSaleDate, now) === 1 ? "" : "s"} left`,
       sortKey: "",
     })),
     ...neverCalledBook.map((c) => ({
