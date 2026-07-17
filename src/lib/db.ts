@@ -95,6 +95,15 @@ async function ensureSchema(): Promise<void> {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // book_clients already existed before secondary_phone was added — CREATE TABLE IF NOT EXISTS
+  // above is a no-op against that existing table, so the column needs an explicit ALTER.
+  try {
+    await db.execute("ALTER TABLE book_clients ADD COLUMN secondary_phone TEXT");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!/duplicate column/i.test(message)) throw err;
+  }
 }
 
 // Ensures the schema exists before any query runs, without re-running executeMultiple on every

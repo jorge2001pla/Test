@@ -37,6 +37,9 @@ export default async function BookClientDetailPage({
           <div>
             <h1 className="font-display text-xl font-semibold text-foreground">{name}</h1>
             <p className="text-sm text-muted-foreground">{client.phone ?? "—"}</p>
+            {client.secondaryPhone && (
+              <p className="text-sm text-muted-foreground">{client.secondaryPhone} (secondary)</p>
+            )}
             {client.email && <p className="text-sm text-muted-foreground">{client.email}</p>}
           </div>
           <StatusBadge status={client.status} />

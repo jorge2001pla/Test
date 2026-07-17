@@ -43,11 +43,19 @@ export default async function NewBookClientPage({
           </div>
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm text-muted-foreground" htmlFor="phone">
-            Phone Number
-          </label>
-          <input id="phone" name="phone" type="tel" className={inputClass} />
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <label className="mb-1 block text-sm text-muted-foreground" htmlFor="phone">
+              Phone Number
+            </label>
+            <input id="phone" name="phone" type="tel" className={inputClass} />
+          </div>
+          <div className="flex-1">
+            <label className="mb-1 block text-sm text-muted-foreground" htmlFor="secondaryPhone">
+              Secondary Number
+            </label>
+            <input id="secondaryPhone" name="secondaryPhone" type="tel" className={inputClass} />
+          </div>
         </div>
 
         <div>

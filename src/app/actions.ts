@@ -139,6 +139,7 @@ export async function createBookClientAction(formData: FormData): Promise<void> 
   const firstName = String(formData.get("firstName") ?? "").trim();
   const lastName = String(formData.get("lastName") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
+  const secondaryPhone = String(formData.get("secondaryPhone") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
 
@@ -150,6 +151,7 @@ export async function createBookClientAction(formData: FormData): Promise<void> 
     firstName: firstName || null,
     lastName: lastName || null,
     phone: phone || null,
+    secondaryPhone: secondaryPhone || null,
     email: email || null,
     notes: notes || null,
   });

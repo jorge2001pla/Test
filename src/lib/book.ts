@@ -9,6 +9,7 @@ export interface BookClient {
   firstName: string | null;
   lastName: string | null;
   phone: string | null;
+  secondaryPhone: string | null;
   status: ClientStatus;
   notes: string | null;
   callbackScheduledAt: string | null;
@@ -26,6 +27,7 @@ interface BookClientRowDb {
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
+  secondary_phone: string | null;
   status: ClientStatus;
   notes: string | null;
   callback_scheduled_at: string | null;
@@ -48,6 +50,7 @@ function mapBookClient(row: BookClientRowDb): BookClient {
     firstName: row.first_name,
     lastName: row.last_name,
     phone: row.phone,
+    secondaryPhone: row.secondary_phone,
     status: row.status,
     notes: row.notes,
     callbackScheduledAt: row.callback_scheduled_at,
@@ -90,6 +93,7 @@ export interface NewBookClientInput {
   firstName?: string | null;
   lastName?: string | null;
   phone?: string | null;
+  secondaryPhone?: string | null;
   notes?: string | null;
 }
 
@@ -98,14 +102,15 @@ export async function createBookClient(input: NewBookClientInput): Promise<BookC
   const id = randomUUID();
   const createdAt = localDateTimeString();
   await db.execute({
-    sql: `INSERT INTO book_clients (id, email, first_name, last_name, phone, notes, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO book_clients (id, email, first_name, last_name, phone, secondary_phone, notes, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       input.email ?? null,
       input.firstName ?? null,
       input.lastName ?? null,
       input.phone ?? null,
+      input.secondaryPhone ?? null,
       input.notes ?? null,
       createdAt,
       createdAt,
