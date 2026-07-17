@@ -154,11 +154,13 @@ export async function createBookClient(input: NewBookClientInput): Promise<BookC
   return mapBookClient(res.rows[0] as unknown as BookClientRowDb);
 }
 
-/** Count of book clients created within [startIso, endIso) — used for the weekly new-client goal. */
+/** Count of manually-added book clients created within [startIso, endIso) — used for the weekly
+ * new-client goal and trend chart. Excludes bulk-imported legacy rows, whose created_at reflects
+ * when they were loaded rather than a real "added this week" event. */
 export async function countBookClientsCreatedInRange(startIso: string, endIso: string): Promise<number> {
   await ready();
   const res = await db.execute({
-    sql: "SELECT COUNT(*) as cnt FROM book_clients WHERE created_at >= ? AND created_at < ?",
+    sql: "SELECT COUNT(*) as cnt FROM book_clients WHERE source = 'manual' AND created_at >= ? AND created_at < ?",
     args: [startIso, endIso],
   });
   return Number((res.rows[0] as unknown as { cnt: number | string }).cnt);

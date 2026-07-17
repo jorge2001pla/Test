@@ -216,12 +216,12 @@ export interface WeekRange {
 const SHORT_DATE = { month: "short", day: "numeric" } as const;
 
 /**
- * The current goal-tracking week, running Thursday through Wednesday (per how this business
- * measures its week), as of `now`.
+ * The goal-tracking week containing `now`, shifted back `weeksAgo` full weeks. Weeks run
+ * Thursday through Wednesday, per how this business measures its week.
  */
-export function currentWeekRange(now: Date = new Date()): WeekRange {
+export function weekRangeFor(now: Date, weeksAgo: number = 0): WeekRange {
   const daysSinceThursday = (now.getDay() - 4 + 7) % 7;
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceThursday);
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceThursday - weeksAgo * 7);
   const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
   const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
   return {
@@ -229,6 +229,23 @@ export function currentWeekRange(now: Date = new Date()): WeekRange {
     end: `${localDateString(end)}T00:00:00`,
     label: `${start.toLocaleDateString(undefined, SHORT_DATE)} – ${lastDay.toLocaleDateString(undefined, SHORT_DATE)}`,
   };
+}
+
+/** The current goal-tracking week, as of `now`. */
+export function currentWeekRange(now: Date = new Date()): WeekRange {
+  return weekRangeFor(now, 0);
+}
+
+/** How many weeks the trend chart shows at once. */
+export const TREND_WEEKS = 8;
+
+/** The last `count` goal-tracking weeks, oldest first, ending with the current (in-progress) week. */
+export function recentWeekRanges(count: number, now: Date = new Date()): WeekRange[] {
+  const ranges: WeekRange[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    ranges.push(weekRangeFor(now, i));
+  }
+  return ranges;
 }
 
 interface CallbackLike {

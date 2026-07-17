@@ -19,6 +19,8 @@ import {
   isNearingExpiryUncalled,
   isWithinNeverCalledWindow,
   localDateString,
+  recentWeekRanges,
+  TREND_WEEKS,
   WEEKLY_GOAL,
 } from "@/lib/business-logic";
 import { formatCallbackTime, formatDate, formatTimeOnly } from "@/lib/format";
@@ -28,6 +30,7 @@ import MonthCalendar, { type CalendarCallback } from "@/components/MonthCalendar
 import ShipmentActions from "@/components/ShipmentActions";
 import ReminderItem from "@/components/ReminderItem";
 import NoteItem from "@/components/NoteItem";
+import WeeklyTrendChart from "@/components/WeeklyTrendChart";
 import { createReminderAction, createNoteAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -90,7 +93,16 @@ export default async function DashboardPage({
   );
 
   const weekRange = currentWeekRange(now);
-  const weeklyBookCount = await countBookClientsCreatedInRange(weekRange.start, weekRange.end);
+  const trendRanges = recentWeekRanges(TREND_WEEKS, now);
+  const trendCounts = await Promise.all(
+    trendRanges.map((r) => countBookClientsCreatedInRange(r.start, r.end))
+  );
+  const weeklyBookCount = trendCounts[trendCounts.length - 1];
+  const trendWeeks = trendRanges.map((r, i) => ({
+    label: r.label.split(" – ")[0],
+    count: trendCounts[i],
+    isCurrent: i === trendRanges.length - 1,
+  }));
 
   const missedClientCallbacks = findMissedCallbacks(clients, now);
   const missedBookCallbacks = findMissedCallbacks(bookClients, now);
@@ -238,6 +250,7 @@ export default async function DashboardPage({
             <div className="h-full rounded-full bg-gold" style={{ width: `${weeklyPct}%` }} />
           </div>
         </div>
+        <WeeklyTrendChart weeks={trendWeeks} goal={WEEKLY_GOAL} />
       </div>
 
       {(overdueRows.length > 0 || overdueReminders.length > 0) && (
