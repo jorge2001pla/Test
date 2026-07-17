@@ -8,7 +8,16 @@ import { TIME_OPTIONS } from "@/lib/time-options";
 const inputClass =
   "w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:border-gold focus:outline-none";
 
-export default function QuickLogCall({ id, kind }: { id: string; kind: "client" | "book" }) {
+export default function QuickLogCall({
+  id,
+  kind,
+  onLogged,
+}: {
+  id: string;
+  kind: "client" | "book";
+  /** Called after a successful save — use to hide the row it lives in, for example. */
+  onLogged?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -45,6 +54,7 @@ export default function QuickLogCall({ id, kind }: { id: string; kind: "client" 
       });
       setDone(true);
       setOpen(false);
+      onLogged?.();
     });
   }
 

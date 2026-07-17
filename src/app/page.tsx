@@ -5,7 +5,7 @@ import {
   listScheduledBookCallbacks,
   countBookClientsCreatedInRange,
 } from "@/lib/book";
-import { listActiveShipments } from "@/lib/shipments";
+import { listActiveShipments, listShipmentsNeedingCallToday } from "@/lib/shipments";
 import { listActiveReminders } from "@/lib/reminders";
 import { listNotes } from "@/lib/notes";
 import {
@@ -19,7 +19,6 @@ import {
   daysSince,
   findMissedCallbacks,
   isNearingExpiryUncalled,
-  isWithinNeverCalledWindow,
   localDateString,
   recentWeekRanges,
   remainingWorkdays,
@@ -28,15 +27,14 @@ import {
 } from "@/lib/business-logic";
 import { formatCallbackTime, formatDate, formatTimeOnly } from "@/lib/format";
 import type { ClientStatus } from "@/lib/types";
-import StatusBadge from "@/components/StatusBadge";
 import MonthCalendar, { type CalendarCallback } from "@/components/MonthCalendar";
 import ShipmentActions from "@/components/ShipmentActions";
 import ReminderItem from "@/components/ReminderItem";
 import NoteItem from "@/components/NoteItem";
 import WeeklyTrendChart from "@/components/WeeklyTrendChart";
-import QuickLogCall from "@/components/QuickLogCall";
 import PhoneLink from "@/components/PhoneLink";
 import TrackingLink from "@/components/TrackingLink";
+import PriorityRowItem, { type PriorityRowData } from "@/components/PriorityRowItem";
 import { createReminderAction, createNoteAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -45,17 +43,11 @@ function monthParam(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
-interface PriorityRow {
-  id: string;
-  name: string;
-  phone: string;
-  href: string;
-  status: ClientStatus;
-  reasonLabel: string;
+/** Row shape used while building the list — adds sort/grouping fields dropped before rendering. */
+interface BuildRow extends PriorityRowData {
   sortKey: string;
-  /** 0 = due today (callback/window), 1 = never-called nudge, 2 = backlog fill (padding). */
+  /** 0 = 50% expiring soon, 1 = callback today, 2 = shipment needs a call, 3 = backlog fill. */
   tier: number;
-  kind: "client" | "book";
 }
 
 interface OverdueRow {
@@ -89,15 +81,13 @@ export default async function DashboardPage({
   const bookCount = bookClients.length;
   const todaysWindowAndCallbacks = buildTodaysPriority(clients, now);
   const activeShipments = await listActiveShipments();
+  const shipmentsNeedingCall = await listShipmentsNeedingCallToday();
 
   const workQueue = buildWorkTheBookQueue(bookClients, now);
   const dormantCount = workQueue.filter((e) => e.kind === "dormant").length;
 
   const neverCalled15Day = clients.filter(
     (c) => c.lastCallNote === null && isNearingExpiryUncalled(c.firstSaleDate, now)
-  );
-  const neverCalledBook = bookClients.filter(
-    (c) => c.source === "manual" && c.lastContactAt === null && isWithinNeverCalledWindow(c.createdAt, now)
   );
 
   const weekRange = currentWeekRange(now);
@@ -144,36 +134,25 @@ export default async function DashboardPage({
   const notes = await listNotes();
   const overdueReminders = reminders.filter((r) => r.dueAt && r.dueAt < today);
 
-  const dueTodayRows: PriorityRow[] = [
-    ...todaysWindowAndCallbacks.map((row) => ({
-      id: row.client.id,
-      name: row.client.name,
-      phone: row.client.phone,
-      href: `/clients/${row.client.id}`,
-      status: row.client.status,
-      reasonLabel:
-        row.reason === "window-closing"
-          ? "Window closes today"
-          : row.reason === "callback" && row.callbackScheduledAt
-            ? `Callback at ${formatTimeOnly(row.callbackScheduledAt)}`
-            : row.reason === "both" && row.callbackScheduledAt
-              ? `Last day — callback at ${formatTimeOnly(row.callbackScheduledAt)}`
-              : "",
-      sortKey: row.callbackScheduledAt ?? "",
-      tier: 0,
-      kind: "client" as const,
-    })),
-    ...todaysBookCallbacks.map((cb) => ({
-      id: cb.bookClientId,
-      name: cb.clientName,
-      phone: cb.clientPhone ?? "—",
-      href: `/book/${cb.bookClientId}`,
-      status: "CALLBACK" as ClientStatus,
-      reasonLabel: `Callback at ${formatTimeOnly(cb.scheduledAt)}`,
-      sortKey: cb.scheduledAt,
-      tier: 0,
-      kind: "book" as const,
-    })),
+  // Tier 0 — 50% expiring soon: window closes today, or (window-closing + callback both today).
+  const expiringSoonRows: BuildRow[] = [
+    ...todaysWindowAndCallbacks
+      .filter((row) => row.reason === "window-closing" || row.reason === "both")
+      .map((row) => ({
+        id: row.client.id,
+        name: row.client.name,
+        phone: row.client.phone,
+        href: `/clients/${row.client.id}`,
+        status: row.client.status,
+        reasonLabel:
+          row.reason === "both" && row.callbackScheduledAt
+            ? `Last day — callback at ${formatTimeOnly(row.callbackScheduledAt)}`
+            : "Window closes today",
+        sortKey: row.callbackScheduledAt ?? "",
+        tier: 0,
+        kind: "client" as const,
+        muted: false,
+      })),
     ...neverCalled15Day.map((c) => ({
       id: c.id,
       name: c.name,
@@ -182,25 +161,66 @@ export default async function DashboardPage({
       status: c.status,
       reasonLabel: `Never called — ${daysLeftInWindow(c.firstSaleDate, now)} day${daysLeftInWindow(c.firstSaleDate, now) === 1 ? "" : "s"} left`,
       sortKey: "",
-      tier: 1,
+      tier: 0,
       kind: "client" as const,
-    })),
-    ...neverCalledBook.map((c) => ({
-      id: c.id,
-      name: [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unnamed",
-      phone: c.phone ?? "—",
-      href: `/book/${c.id}`,
-      status: c.status,
-      reasonLabel: `New lead, never called (day ${daysSince(c.createdAt, now) + 1})`,
-      sortKey: "",
-      tier: 1,
-      kind: "book" as const,
+      muted: false,
     })),
   ];
 
+  // Tier 1 — callbacks scheduled for today (15-day clients and book clients alike).
+  const callbackTodayRows: BuildRow[] = [
+    ...todaysWindowAndCallbacks
+      .filter((row) => row.reason === "callback")
+      .map((row) => ({
+        id: row.client.id,
+        name: row.client.name,
+        phone: row.client.phone,
+        href: `/clients/${row.client.id}`,
+        status: row.client.status,
+        reasonLabel: row.callbackScheduledAt ? `Callback at ${formatTimeOnly(row.callbackScheduledAt)}` : "",
+        sortKey: row.callbackScheduledAt ?? "",
+        tier: 1,
+        kind: "client" as const,
+        muted: false,
+      })),
+    ...todaysBookCallbacks.map((cb) => ({
+      id: cb.bookClientId,
+      name: cb.clientName,
+      phone: cb.clientPhone ?? "—",
+      href: `/book/${cb.bookClientId}`,
+      status: "CALLBACK" as ClientStatus,
+      reasonLabel: `Callback at ${formatTimeOnly(cb.scheduledAt)}`,
+      sortKey: cb.scheduledAt,
+      tier: 1,
+      kind: "book" as const,
+      muted: false,
+    })),
+  ];
+
+  // Tier 2 — shipments with an actual call due right now (shipped or delivered, not yet called about).
+  const shipmentRows: BuildRow[] = shipmentsNeedingCall.map((s) => {
+    const type: "shipped" | "delivered" = s.shippedCallDone ? "delivered" : "shipped";
+    return {
+      id: s.id,
+      name: s.clientName,
+      phone: s.clientPhone ?? "—",
+      href: `/book/${s.bookClientId}`,
+      status: s.clientStatus,
+      reasonLabel: type === "shipped" ? "Shipped — call to confirm" : "Delivered — call to confirm",
+      sortKey: "",
+      tier: 2,
+      kind: "book" as const,
+      muted: false,
+      shipmentAction: { shipmentId: s.id, bookClientId: s.bookClientId, type },
+    };
+  });
+
+  const dueTodayRows: BuildRow[] = [...expiringSoonRows, ...callbackTodayRows, ...shipmentRows];
+
+  // Tier 3 — backlog fill, only enough to round the list out to the daily target.
   const dueTodayIds = new Set(dueTodayRows.map((r) => r.id));
   const backlogFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length);
-  const backlogRows: PriorityRow[] = workQueue
+  const backlogRows: BuildRow[] = workQueue
     .filter((e) => !dueTodayIds.has(e.client.id))
     .slice(0, backlogFillCount)
     .map((e) => ({
@@ -214,14 +234,17 @@ export default async function DashboardPage({
           ? `Backlog — cold ${daysSince(e.client.lastContactAt as string, now)} days`
           : "Backlog — never contacted",
       sortKey: "",
-      tier: 2,
+      tier: 3,
       kind: "book" as const,
+      muted: true,
     }));
 
-  const priorityRows: PriorityRow[] = [...dueTodayRows, ...backlogRows].sort((a, b) => {
-    if (a.tier !== b.tier) return a.tier - b.tier;
-    return a.sortKey && b.sortKey ? a.sortKey.localeCompare(b.sortKey) : a.name.localeCompare(b.name);
-  });
+  const priorityRows: PriorityRowData[] = [...dueTodayRows, ...backlogRows]
+    .sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier - b.tier;
+      return a.sortKey && b.sortKey ? a.sortKey.localeCompare(b.sortKey) : a.name.localeCompare(b.name);
+    })
+    .map(({ sortKey: _sortKey, tier: _tier, ...row }) => row);
 
   const monthStart = `${year}-${String(month + 1).padStart(2, "0")}-01T00:00`;
   const nextMonthDate = new Date(year, month + 1, 1);
@@ -336,8 +359,9 @@ export default async function DashboardPage({
       <div>
         <h2 className="font-display text-lg font-semibold text-foreground">Today&apos;s Priority</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Your call list for the day, top to bottom — what&apos;s actually due first, then filled
-          out from your backlog so there&apos;s always something to work.
+          Your call list for the day, top to bottom — 50% clients expiring soon, then callbacks
+          scheduled for today, then shipments needing a call, filled out from your backlog so
+          there&apos;s always {DAILY_QUEUE_TARGET} to work.
         </p>
         <div className="mt-4">
           {priorityRows.length === 0 ? (
@@ -359,32 +383,7 @@ export default async function DashboardPage({
                   </thead>
                   <tbody className="divide-y divide-border">
                     {priorityRows.map((row) => (
-                      <tr key={row.href} className="hover:bg-gold/5">
-                        <td className="px-4 py-3">
-                          <Link
-                            href={row.href}
-                            className="font-medium text-foreground hover:text-gold hover:underline"
-                          >
-                            {row.name}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          <PhoneLink phone={row.phone} />
-                        </td>
-                        <td
-                          className={
-                            row.tier === 2 ? "px-4 py-3 text-muted-foreground" : "px-4 py-3 text-foreground"
-                          }
-                        >
-                          {row.reasonLabel}
-                        </td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={row.status} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <QuickLogCall id={row.id} kind={row.kind} />
-                        </td>
-                      </tr>
+                      <PriorityRowItem key={row.href} row={row} />
                     ))}
                   </tbody>
                 </table>

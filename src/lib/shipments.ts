@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import db, { ready } from "./db";
 import { localDateTimeString } from "./business-logic";
+import type { ClientStatus } from "./types";
 
 export type Carrier = "USPS" | "FedEx" | "Other";
 
@@ -23,6 +24,7 @@ export interface Shipment {
 export interface ShipmentWithClient extends Shipment {
   clientName: string;
   clientPhone: string | null;
+  clientStatus: ClientStatus;
 }
 
 interface ShipmentRowDb {
@@ -68,7 +70,7 @@ export async function listShipmentsForClient(bookClientId: string): Promise<Ship
 export async function listActiveShipments(): Promise<ShipmentWithClient[]> {
   await ready();
   const res = await db.execute(
-    `SELECT s.*, b.first_name, b.last_name, b.phone
+    `SELECT s.*, b.first_name, b.last_name, b.phone, b.status
      FROM shipments s
      JOIN book_clients b ON b.id = s.book_client_id
      WHERE s.shipped_call_done = 0
@@ -80,11 +82,40 @@ export async function listActiveShipments(): Promise<ShipmentWithClient[]> {
     first_name: string | null;
     last_name: string | null;
     phone: string | null;
+    status: ClientStatus;
   })[];
   return rows.map((row) => ({
     ...mapShipment(row),
     clientName: [row.first_name, row.last_name].filter(Boolean).join(" ") || "Unnamed",
     clientPhone: row.phone,
+    clientStatus: row.status,
+  }));
+}
+
+/** Shipments with an actual call to make right now — shipped but not yet called about, or
+ * delivered but not yet called about. Excludes shipments still in transit with nothing due yet
+ * (that's what listActiveShipments' broader "in progress" tracking is for). */
+export async function listShipmentsNeedingCallToday(): Promise<ShipmentWithClient[]> {
+  await ready();
+  const res = await db.execute(
+    `SELECT s.*, b.first_name, b.last_name, b.phone, b.status
+     FROM shipments s
+     JOIN book_clients b ON b.id = s.book_client_id
+     WHERE s.shipped_call_done = 0
+        OR (s.delivered_at IS NOT NULL AND s.delivered_call_done = 0)
+     ORDER BY s.shipped_at ASC`
+  );
+  const rows = res.rows as unknown as (ShipmentRowDb & {
+    first_name: string | null;
+    last_name: string | null;
+    phone: string | null;
+    status: ClientStatus;
+  })[];
+  return rows.map((row) => ({
+    ...mapShipment(row),
+    clientName: [row.first_name, row.last_name].filter(Boolean).join(" ") || "Unnamed",
+    clientPhone: row.phone,
+    clientStatus: row.status,
   }));
 }
 
