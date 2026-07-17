@@ -11,7 +11,9 @@ import { listNotes } from "@/lib/notes";
 import {
   buildFollowUpSections,
   buildTodaysPriority,
+  buildWorkTheBookQueue,
   currentWeekRange,
+  DAILY_QUEUE_TARGET,
   daysLeftInWindow,
   DORMANT_DAYS,
   daysSince,
@@ -47,6 +49,8 @@ interface PriorityRow {
   status: ClientStatus;
   reasonLabel: string;
   sortKey: string;
+  /** 0 = due today (callback/window), 1 = never-called nudge, 2 = backlog fill (padding). */
+  tier: number;
 }
 
 interface OverdueRow {
@@ -81,9 +85,8 @@ export default async function DashboardPage({
   const todaysWindowAndCallbacks = buildTodaysPriority(clients, now);
   const activeShipments = await listActiveShipments();
 
-  const dormantCount = bookClients.filter(
-    (c) => c.status !== "NOT_INTERESTED" && c.lastContactAt !== null && daysSince(c.lastContactAt, now) >= DORMANT_DAYS
-  ).length;
+  const workQueue = buildWorkTheBookQueue(bookClients, now);
+  const dormantCount = workQueue.filter((e) => e.kind === "dormant").length;
 
   const neverCalled15Day = clients.filter(
     (c) => c.lastCallNote === null && isNearingExpiryUncalled(c.firstSaleDate, now)
@@ -136,7 +139,7 @@ export default async function DashboardPage({
   const notes = await listNotes();
   const overdueReminders = reminders.filter((r) => r.dueAt && r.dueAt < today);
 
-  const priorityRows: PriorityRow[] = [
+  const dueTodayRows: PriorityRow[] = [
     ...todaysWindowAndCallbacks.map((row) => ({
       id: row.client.id,
       name: row.client.name,
@@ -152,6 +155,7 @@ export default async function DashboardPage({
               ? `Last day — callback at ${formatTimeOnly(row.callbackScheduledAt)}`
               : "",
       sortKey: row.callbackScheduledAt ?? "",
+      tier: 0,
     })),
     ...todaysBookCallbacks.map((cb) => ({
       id: cb.bookClientId,
@@ -161,6 +165,7 @@ export default async function DashboardPage({
       status: "CALLBACK" as ClientStatus,
       reasonLabel: `Callback at ${formatTimeOnly(cb.scheduledAt)}`,
       sortKey: cb.scheduledAt,
+      tier: 0,
     })),
     ...neverCalled15Day.map((c) => ({
       id: c.id,
@@ -170,6 +175,7 @@ export default async function DashboardPage({
       status: c.status,
       reasonLabel: `Never called — ${daysLeftInWindow(c.firstSaleDate, now)} day${daysLeftInWindow(c.firstSaleDate, now) === 1 ? "" : "s"} left`,
       sortKey: "",
+      tier: 1,
     })),
     ...neverCalledBook.map((c) => ({
       id: c.id,
@@ -179,8 +185,33 @@ export default async function DashboardPage({
       status: c.status,
       reasonLabel: `New lead, never called (day ${daysSince(c.createdAt, now) + 1})`,
       sortKey: "",
+      tier: 1,
     })),
-  ].sort((a, b) => (a.sortKey && b.sortKey ? a.sortKey.localeCompare(b.sortKey) : a.name.localeCompare(b.name)));
+  ];
+
+  const dueTodayIds = new Set(dueTodayRows.map((r) => r.id));
+  const backlogFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length);
+  const backlogRows: PriorityRow[] = workQueue
+    .filter((e) => !dueTodayIds.has(e.client.id))
+    .slice(0, backlogFillCount)
+    .map((e) => ({
+      id: e.client.id,
+      name: [e.client.firstName, e.client.lastName].filter(Boolean).join(" ") || "Unnamed",
+      phone: e.client.phone ?? "—",
+      href: `/book/${e.client.id}`,
+      status: e.client.status,
+      reasonLabel:
+        e.kind === "dormant"
+          ? `Backlog — cold ${daysSince(e.client.lastContactAt as string, now)} days`
+          : "Backlog — never contacted",
+      sortKey: "",
+      tier: 2,
+    }));
+
+  const priorityRows: PriorityRow[] = [...dueTodayRows, ...backlogRows].sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    return a.sortKey && b.sortKey ? a.sortKey.localeCompare(b.sortKey) : a.name.localeCompare(b.name);
+  });
 
   const monthStart = `${year}-${String(month + 1).padStart(2, "0")}-01T00:00`;
   const nextMonthDate = new Date(year, month + 1, 1);
@@ -283,46 +314,63 @@ export default async function DashboardPage({
       <div>
         <h2 className="font-display text-lg font-semibold text-foreground">Today&apos;s Priority</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Windows closing today, and callbacks you scheduled for today — new clients and existing
-          book clients alike. This is the place to start every day.
+          Your call list for the day, top to bottom — what&apos;s actually due first, then filled
+          out from your backlog so there&apos;s always something to work.
         </p>
         <div className="mt-4">
           {priorityRows.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              Nothing due today. Check the 50% Follow-Up tab for what&apos;s coming up.
+              Nothing due, and your backlog is clear. Great spot to be in.
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-border bg-card">
-              <table className="min-w-full divide-y divide-border text-sm">
-                <thead className="bg-background text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2">Client</th>
-                    <th className="px-4 py-2">Phone</th>
-                    <th className="px-4 py-2">Why Today</th>
-                    <th className="px-4 py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {priorityRows.map((row) => (
-                    <tr key={row.href} className="hover:bg-gold/5">
-                      <td className="px-4 py-3">
-                        <Link
-                          href={row.href}
-                          className="font-medium text-foreground hover:text-gold hover:underline"
-                        >
-                          {row.name}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{row.phone}</td>
-                      <td className="px-4 py-3 text-foreground">{row.reasonLabel}</td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={row.status} />
-                      </td>
+            <>
+              <div className="overflow-x-auto rounded-lg border border-border bg-card">
+                <table className="min-w-full divide-y divide-border text-sm">
+                  <thead className="bg-background text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2">Client</th>
+                      <th className="px-4 py-2">Phone</th>
+                      <th className="px-4 py-2">Why Today</th>
+                      <th className="px-4 py-2">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {priorityRows.map((row) => (
+                      <tr key={row.href} className="hover:bg-gold/5">
+                        <td className="px-4 py-3">
+                          <Link
+                            href={row.href}
+                            className="font-medium text-foreground hover:text-gold hover:underline"
+                          >
+                            {row.name}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{row.phone}</td>
+                        <td
+                          className={
+                            row.tier === 2 ? "px-4 py-3 text-muted-foreground" : "px-4 py-3 text-foreground"
+                          }
+                        >
+                          {row.reasonLabel}
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={row.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {backlogRows.length > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {backlogRows.length} pulled from your{" "}
+                  <Link href="/reactivate" className="underline hover:text-gold">
+                    backlog
+                  </Link>{" "}
+                  to round out today.
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -503,12 +551,12 @@ export default async function DashboardPage({
           href="/reactivate"
           className="block rounded-lg border border-border bg-card p-5 transition-[border-color,box-shadow] hover:border-gold hover:shadow-sm"
         >
-          <h2 className="font-display text-lg font-semibold text-foreground">Reactivate</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">Work the Book</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Clients you haven&apos;t spoken to in {DORMANT_DAYS}+ days.
+            Gone cold ({DORMANT_DAYS}+ days) or never contacted at all.
           </p>
           <p className="mt-3 text-2xl font-semibold text-gold">
-            {dormantCount} <span className="text-sm font-normal text-muted-foreground">dormant</span>
+            {workQueue.length} <span className="text-sm font-normal text-muted-foreground">to work</span>
           </p>
         </Link>
       </div>

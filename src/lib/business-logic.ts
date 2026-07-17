@@ -282,6 +282,53 @@ export function isWithinNeverCalledWindow(intakeDate: string, now: Date = new Da
   return since >= 0 && since <= NEVER_CALLED_WINDOW_DAYS;
 }
 
+/** Minimum size Today's Priority tries to hit by pulling from the Work the Book backlog on
+ * light days, so there's always a concrete call list rather than an empty page. */
+export const DAILY_QUEUE_TARGET = 10;
+
+interface BacklogClient {
+  id: string;
+  status: ClientStatus;
+  lastContactAt: string | null;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+export type BacklogKind = "dormant" | "never-contacted";
+
+export interface BacklogEntry<T extends BacklogClient> {
+  client: T;
+  kind: BacklogKind;
+}
+
+/**
+ * The "Work the Book" queue: clients worth proactively calling when nothing else is due.
+ * Cold-after-contact clients rank first (you have history/notes, warmer re-engagement) followed
+ * by never-contacted clients — which covers both the bulk-imported legacy book and any manual
+ * add that aged out of the never-called nudge without ever getting a call.
+ */
+export function buildWorkTheBookQueue<T extends BacklogClient>(
+  clients: T[],
+  now: Date = new Date()
+): BacklogEntry<T>[] {
+  const dormant = clients
+    .filter(
+      (c) => c.status !== "NOT_INTERESTED" && c.lastContactAt !== null && daysSince(c.lastContactAt, now) >= DORMANT_DAYS
+    )
+    .sort((a, b) => (a.lastContactAt as string).localeCompare(b.lastContactAt as string))
+    .map((client) => ({ client, kind: "dormant" as const }));
+
+  const neverContacted = clients
+    .filter((c) => c.lastContactAt === null && c.status !== "NOT_INTERESTED")
+    .sort(
+      (a, b) =>
+        (a.lastName ?? "").localeCompare(b.lastName ?? "") || (a.firstName ?? "").localeCompare(b.firstName ?? "")
+    )
+    .map((client) => ({ client, kind: "never-contacted" as const }));
+
+  return [...dormant, ...neverContacted];
+}
+
 /**
  * True for 15-day clients who are still uncalled with their window closing soon (5 days or fewer
  * left, but not yet zero — that's the separate "closes today" trigger). Catches leads that would
