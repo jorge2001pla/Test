@@ -4,16 +4,27 @@ import { createBookClientAction } from "@/app/actions";
 const inputClass =
   "w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none";
 
-export default function NewBookClientPage() {
+export default async function NewBookClientPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ existing?: string }>;
+}) {
+  const { existing } = await searchParams;
+  const isExisting = existing === "1";
+
   return (
     <div className="max-w-xl">
-      <Link href="/" className="text-sm text-muted-foreground hover:text-gold">
-        ← Back to Dashboard
+      <Link href="/book" className="text-sm text-muted-foreground hover:text-gold">
+        ← Back to Clients
       </Link>
-      <h1 className="mt-2 font-display text-2xl font-semibold text-foreground">Log New Account</h1>
+      <h1 className="mt-2 font-display text-2xl font-semibold text-foreground">
+        {isExisting ? "Add Client" : "Log New Account"}
+      </h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        For accounts you opened yourself (e.g. the Morgan promo) that go straight into your book —
-        no 15-day window to track, just add them and they count toward this week&apos;s goal.
+        {isExisting
+          ? "For an existing or reactivated client who should go straight into your book — no 15-day window to track."
+          : "For accounts you opened yourself (e.g. the Morgan promo) that go straight into your book — no 15-day window to track."}{" "}
+        Either way, they count toward this week&apos;s goal.
       </p>
 
       <form action={createBookClientAction} className="mt-6 space-y-4">
