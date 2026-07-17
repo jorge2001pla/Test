@@ -13,6 +13,7 @@ export interface Shipment {
   carrier: Carrier;
   trackingLink: string;
   notes: string | null;
+  saleAmount: number | null;
   shippedAt: string;
   shippedCallDone: boolean;
   deliveredAt: string | null;
@@ -33,6 +34,7 @@ interface ShipmentRowDb {
   carrier: Carrier;
   tracking_link: string;
   notes: string | null;
+  sale_amount: number | null;
   shipped_at: string;
   shipped_call_done: number;
   delivered_at: string | null;
@@ -48,6 +50,7 @@ function mapShipment(row: ShipmentRowDb): Shipment {
     carrier: row.carrier,
     trackingLink: row.tracking_link,
     notes: row.notes,
+    saleAmount: row.sale_amount,
     shippedAt: row.shipped_at,
     shippedCallDone: !!row.shipped_call_done,
     deliveredAt: row.delivered_at,
@@ -124,17 +127,37 @@ export interface NewShipmentInput {
   carrier: Carrier;
   trackingLink: string;
   notes?: string | null;
+  saleAmount?: number | null;
 }
 
 export async function createShipment(input: NewShipmentInput): Promise<Shipment> {
   await ready();
   const id = randomUUID();
   const now = localDateTimeString();
-  await db.execute({
-    sql: `INSERT INTO shipments (id, book_client_id, carrier, tracking_link, notes, shipped_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [id, input.bookClientId, input.carrier, input.trackingLink, input.notes ?? null, now, now, now],
-  });
+  const statements = [
+    {
+      sql: `INSERT INTO shipments (id, book_client_id, carrier, tracking_link, notes, sale_amount, shipped_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        id,
+        input.bookClientId,
+        input.carrier,
+        input.trackingLink,
+        input.notes ?? null,
+        input.saleAmount ?? null,
+        now,
+        now,
+        now,
+      ],
+    },
+  ];
+  if (input.saleAmount) {
+    statements.push({
+      sql: `UPDATE book_clients SET lifetime_value = lifetime_value + ?, updated_at = datetime('now') WHERE id = ?`,
+      args: [input.saleAmount, input.bookClientId],
+    });
+  }
+  await db.batch(statements, "write");
   const res = await db.execute({ sql: "SELECT * FROM shipments WHERE id = ?", args: [id] });
   return mapShipment(res.rows[0] as unknown as ShipmentRowDb);
 }

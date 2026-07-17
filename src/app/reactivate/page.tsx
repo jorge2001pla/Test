@@ -4,6 +4,7 @@ import { buildWorkTheBookQueue, DORMANT_DAYS, daysSince } from "@/lib/business-l
 import { formatDate } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
 import PhoneLink from "@/components/PhoneLink";
+import ValueBadge from "@/components/ValueBadge";
 import QuickLogCall from "@/components/QuickLogCall";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ export default async function ReactivatePage() {
               <tr>
                 <th className="px-4 py-2">Client</th>
                 <th className="px-4 py-2">Phone</th>
+                <th className="px-4 py-2">Value</th>
                 <th className="px-4 py-2">Last Contact</th>
                 <th className="px-4 py-2">Status</th>
                 <th className="px-4 py-2">Last Note</th>
@@ -59,6 +61,9 @@ export default async function ReactivatePage() {
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     <PhoneLink phone={e.client.phone} />
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    <ValueBadge value={e.client.lifetimeValue} />
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {e.kind === "dormant"

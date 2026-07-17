@@ -4,10 +4,12 @@ import {
   listBookClientsWithLastContact,
   listScheduledBookCallbacks,
   countBookClientsCreatedInRange,
+  getBookValueStats,
 } from "@/lib/book";
 import { listActiveShipments, listShipmentsNeedingCallToday } from "@/lib/shipments";
 import { listActiveReminders } from "@/lib/reminders";
 import { listNotes } from "@/lib/notes";
+import { getActivePromotion, getPromotionProgress, listNotCalledAboutPromotion } from "@/lib/promotions";
 import {
   buildFollowUpSections,
   buildTodaysPriority,
@@ -23,9 +25,12 @@ import {
   recentWeekRanges,
   remainingWorkdays,
   TREND_WEEKS,
+  VALUE_TIER_THRESHOLDS,
   WEEKLY_GOAL,
+  WHALE_GOAL_COUNT,
+  WHALE_GOAL_VALUE,
 } from "@/lib/business-logic";
-import { formatCallbackTime, formatDate, formatTimeOnly } from "@/lib/format";
+import { formatCallbackTime, formatDate, formatTimeOnly, formatWholeCurrency } from "@/lib/format";
 import type { ClientStatus } from "@/lib/types";
 import MonthCalendar, { type CalendarCallback } from "@/components/MonthCalendar";
 import ShipmentActions from "@/components/ShipmentActions";
@@ -46,7 +51,8 @@ function monthParam(year: number, month: number): string {
 /** Row shape used while building the list — adds sort/grouping fields dropped before rendering. */
 interface BuildRow extends PriorityRowData {
   sortKey: string;
-  /** 0 = 50% expiring soon, 1 = callback today, 2 = shipment needs a call, 3 = backlog fill. */
+  /** 0 = 50% expiring soon, 1 = callback today, 2 = shipment needs a call, 3 = active promo
+   * not yet called, 4 = backlog fill. */
   tier: number;
 }
 
@@ -85,6 +91,13 @@ export default async function DashboardPage({
 
   const workQueue = buildWorkTheBookQueue(bookClients, now);
   const dormantCount = workQueue.filter((e) => e.kind === "dormant").length;
+
+  const activePromotion = await getActivePromotion();
+  const [promotionProgress, promoTargets, valueStats] = await Promise.all([
+    activePromotion ? getPromotionProgress(activePromotion.id) : Promise.resolve(null),
+    activePromotion ? listNotCalledAboutPromotion(activePromotion.id) : Promise.resolve([]),
+    getBookValueStats(VALUE_TIER_THRESHOLDS.whale),
+  ]);
 
   const neverCalled15Day = clients.filter(
     (c) => c.lastCallNote === null && isNearingExpiryUncalled(c.firstSaleDate, now)
@@ -217,9 +230,31 @@ export default async function DashboardPage({
 
   const dueTodayRows: BuildRow[] = [...expiringSoonRows, ...callbackTodayRows, ...shipmentRows];
 
-  // Tier 3 — backlog fill, only enough to round the list out to the daily target.
+  // Tier 3 — active promo push, not yet called, biggest clients first — only enough to round
+  // the list toward the daily target (a promo push shouldn't itself blow past the target).
   const dueTodayIds = new Set(dueTodayRows.map((r) => r.id));
-  const backlogFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length);
+  const promoFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length);
+  const promoRows: BuildRow[] = activePromotion
+    ? promoTargets
+        .filter((c) => !dueTodayIds.has(c.id))
+        .slice(0, promoFillCount)
+        .map((c) => ({
+          id: c.id,
+          name: [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unnamed",
+          phone: c.phone ?? "—",
+          href: `/book/${c.id}`,
+          status: c.status,
+          reasonLabel: `Promo — ${activePromotion.name}`,
+          sortKey: "",
+          tier: 3,
+          kind: "book" as const,
+          muted: false,
+        }))
+    : [];
+  for (const r of promoRows) dueTodayIds.add(r.id);
+
+  // Tier 4 — backlog fill, only enough to round the list out to the daily target.
+  const backlogFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length - promoRows.length);
   const backlogRows: BuildRow[] = workQueue
     .filter((e) => !dueTodayIds.has(e.client.id))
     .slice(0, backlogFillCount)
@@ -234,12 +269,12 @@ export default async function DashboardPage({
           ? `Backlog — cold ${daysSince(e.client.lastContactAt as string, now)} days`
           : "Backlog — never contacted",
       sortKey: "",
-      tier: 3,
+      tier: 4,
       kind: "book" as const,
       muted: true,
     }));
 
-  const priorityRows: PriorityRowData[] = [...dueTodayRows, ...backlogRows]
+  const priorityRows: PriorityRowData[] = [...dueTodayRows, ...promoRows, ...backlogRows]
     .sort((a, b) => {
       if (a.tier !== b.tier) return a.tier - b.tier;
       return a.sortKey && b.sortKey ? a.sortKey.localeCompare(b.sortKey) : a.name.localeCompare(b.name);
@@ -326,6 +361,53 @@ export default async function DashboardPage({
         <WeeklyTrendChart weeks={trendWeeks} goal={WEEKLY_GOAL} />
       </div>
 
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h2 className="font-display text-lg font-semibold text-foreground">Whale Tracker</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Goal: {WHALE_GOAL_COUNT} clients at $50k+ — a {formatWholeCurrency(WHALE_GOAL_VALUE)} book.
+          </p>
+          <div className="mt-3 flex items-center gap-4">
+            <p className="text-2xl font-semibold text-gold">
+              {valueStats.whaleCount}
+              <span className="text-sm font-normal text-muted-foreground"> / {WHALE_GOAL_COUNT} Whales</span>
+            </p>
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
+              <div
+                className="h-full rounded-full bg-gold"
+                style={{ width: `${Math.min(100, Math.round((valueStats.whaleCount / WHALE_GOAL_COUNT) * 100))}%` }}
+              />
+            </div>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {formatWholeCurrency(valueStats.totalValue)} tracked of {formatWholeCurrency(WHALE_GOAL_VALUE)} goal.
+          </p>
+        </div>
+
+        {activePromotion && promotionProgress ? (
+          <Link
+            href="/promotions"
+            className="block rounded-lg border border-gold/40 bg-card p-5 transition-[border-color,box-shadow] hover:shadow-sm"
+          >
+            <h2 className="font-display text-lg font-semibold text-foreground">Active Promotion</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{activePromotion.name}</p>
+            <div className="mt-3 flex flex-wrap gap-4 text-sm">
+              <span className="text-gold">{promotionProgress.emailedCount} emailed</span>
+              <span className="text-gold">{promotionProgress.textedCount} texted</span>
+              <span className="text-gold">{promotionProgress.calledCount} called</span>
+              <span className="text-muted-foreground">of {promotionProgress.totalClients}</span>
+            </div>
+          </Link>
+        ) : (
+          <Link
+            href="/promotions"
+            className="flex flex-col justify-center rounded-lg border border-dashed border-border bg-card p-5 text-center transition-colors hover:border-gold"
+          >
+            <span className="text-sm text-muted-foreground">No active promotion — start one</span>
+          </Link>
+        )}
+      </div>
+
       {(overdueRows.length > 0 || overdueReminders.length > 0) && (
         <div className="rounded-lg border border-red-600/40 bg-card p-5 dark:border-red-400/40">
           <h2 className="font-display text-lg font-semibold text-red-600 dark:text-red-400">
@@ -388,12 +470,25 @@ export default async function DashboardPage({
                   </tbody>
                 </table>
               </div>
-              {backlogRows.length > 0 && (
+              {(promoRows.length > 0 || backlogRows.length > 0) && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {backlogRows.length} pulled from your{" "}
-                  <Link href="/reactivate" className="underline hover:text-gold">
-                    backlog
-                  </Link>{" "}
+                  {promoRows.length > 0 && (
+                    <>
+                      {promoRows.length} from the active{" "}
+                      <Link href="/promotions" className="underline hover:text-gold">
+                        promotion
+                      </Link>
+                      {backlogRows.length > 0 && ", "}
+                    </>
+                  )}
+                  {backlogRows.length > 0 && (
+                    <>
+                      {backlogRows.length} pulled from your{" "}
+                      <Link href="/reactivate" className="underline hover:text-gold">
+                        backlog
+                      </Link>
+                    </>
+                  )}{" "}
                   to round out today.
                 </p>
               )}

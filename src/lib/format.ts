@@ -3,6 +3,16 @@ export function formatCurrency(amount: number | null): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
 }
 
+/** Whole-dollar currency, no cents — for larger figures like lifetime value where cents are noise. */
+export function formatWholeCurrency(amount: number | null): string {
+  if (amount == null) return "—";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 export function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr);

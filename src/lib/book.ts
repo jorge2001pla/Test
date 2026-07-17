@@ -17,6 +17,7 @@ export interface BookClient {
    * legacy records — createdAt on 'import' rows reflects when they were loaded, not real intake,
    * so only 'manual' rows are eligible for the never-called-yet nudge. */
   source: "manual" | "import";
+  lifetimeValue: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -36,6 +37,7 @@ interface BookClientRowDb {
   notes: string | null;
   callback_scheduled_at: string | null;
   source: "manual" | "import";
+  lifetime_value: number;
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +62,7 @@ function mapBookClient(row: BookClientRowDb): BookClient {
     notes: row.notes,
     callbackScheduledAt: row.callback_scheduled_at,
     source: row.source,
+    lifetimeValue: row.lifetime_value,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -79,6 +82,27 @@ export async function listBookClients(): Promise<BookClient[]> {
   await ready();
   const res = await db.execute("SELECT * FROM book_clients ORDER BY last_name, first_name");
   return (res.rows as unknown as BookClientRowDb[]).map(mapBookClient);
+}
+
+export interface BookValueStats {
+  whaleCount: number;
+  totalValue: number;
+}
+
+/** Powers the Whale Tracker — count of clients at the Whale threshold and the book's total
+ * tracked value. Threshold is passed in rather than imported, to keep this module decoupled
+ * from the tier definitions in business-logic.ts. */
+export async function getBookValueStats(whaleThreshold: number): Promise<BookValueStats> {
+  await ready();
+  const res = await db.execute({
+    sql: `SELECT
+            COUNT(CASE WHEN lifetime_value >= ? THEN 1 END) as whale_count,
+            COALESCE(SUM(lifetime_value), 0) as total_value
+          FROM book_clients`,
+    args: [whaleThreshold],
+  });
+  const row = res.rows[0] as unknown as { whale_count: number | string; total_value: number | string };
+  return { whaleCount: Number(row.whale_count), totalValue: Number(row.total_value) };
 }
 
 export interface BookClientWithLastContact extends BookClient {
@@ -171,11 +195,31 @@ export async function deleteBookClient(id: string): Promise<void> {
   await db.execute({ sql: "DELETE FROM book_clients WHERE id = ?", args: [id] });
 }
 
+/** Overwrites a client's lifetime value — for manual entry/correction (e.g. loading known
+ * history from an outside CRM). */
+export async function setLifetimeValue(id: string, value: number): Promise<void> {
+  await ready();
+  await db.execute({
+    sql: `UPDATE book_clients SET lifetime_value = ?, updated_at = datetime('now') WHERE id = ?`,
+    args: [value, id],
+  });
+}
+
+/** Adds to a client's running lifetime value — used when a shipment is logged with a sale amount. */
+export async function addToLifetimeValue(id: string, amount: number): Promise<void> {
+  await ready();
+  await db.execute({
+    sql: `UPDATE book_clients SET lifetime_value = lifetime_value + ?, updated_at = datetime('now') WHERE id = ?`,
+    args: [amount, id],
+  });
+}
+
 export async function addBookCallLogEntry(
   bookClientId: string,
   noteText: string,
   resultingStatus: ClientStatus,
-  callbackScheduledAt: string | null = null
+  callbackScheduledAt: string | null = null,
+  promotionId: string | null = null
 ): Promise<void> {
   await ready();
   const id = randomUUID();
@@ -183,9 +227,9 @@ export async function addBookCallLogEntry(
   await db.batch(
     [
       {
-        sql: `INSERT INTO book_call_log_entries (id, book_client_id, timestamp, note_text, resulting_status)
-              VALUES (?, ?, ?, ?, ?)`,
-        args: [id, bookClientId, localDateTimeString(), noteText, resultingStatus],
+        sql: `INSERT INTO book_call_log_entries (id, book_client_id, timestamp, note_text, resulting_status, promotion_id)
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [id, bookClientId, localDateTimeString(), noteText, resultingStatus, promotionId],
       },
       {
         sql: `UPDATE book_clients SET status = ?, callback_scheduled_at = ?, updated_at = datetime('now') WHERE id = ?`,

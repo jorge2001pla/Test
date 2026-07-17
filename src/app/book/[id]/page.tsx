@@ -2,13 +2,14 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getBookClient } from "@/lib/book";
 import { listShipmentsForClient, CARRIERS } from "@/lib/shipments";
-import { formatCallbackTime, formatDate, formatDateTime } from "@/lib/format";
+import { formatCallbackTime, formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { suggestsFallbackPitch } from "@/lib/business-logic";
 import StatusBadge from "@/components/StatusBadge";
 import CallbackScheduleFields from "@/components/CallbackScheduleFields";
 import ShipmentActions from "@/components/ShipmentActions";
 import PhoneLink from "@/components/PhoneLink";
 import TrackingLink from "@/components/TrackingLink";
+import LifetimeValueEditor from "@/components/LifetimeValueEditor";
 import { addBookCallLogAction, createShipmentAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +48,9 @@ export default async function BookClientDetailPage({
               </p>
             )}
             {client.email && <p className="text-sm text-muted-foreground">{client.email}</p>}
+            <div className="mt-2">
+              <LifetimeValueEditor bookClientId={client.id} value={client.lifetimeValue} />
+            </div>
           </div>
           <StatusBadge status={client.status} />
         </div>
@@ -108,6 +112,20 @@ export default async function BookClientDetailPage({
               className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
             />
           </div>
+          <div>
+            <label className="mb-1 block text-sm text-muted-foreground" htmlFor="saleAmount">
+              Sale Amount
+            </label>
+            <input
+              id="saleAmount"
+              name="saleAmount"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Optional"
+              className="w-28 rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
+            />
+          </div>
           <div className="flex-1 min-w-[10rem]">
             <label className="mb-1 block text-sm text-muted-foreground" htmlFor="shipmentNotes">
               Notes
@@ -141,6 +159,9 @@ export default async function BookClientDetailPage({
                     {s.deliveredAt && ` · Delivered ${formatDate(s.deliveredAt)}`}
                   </span>
                 </div>
+                {s.saleAmount != null && (
+                  <p className="mt-1 text-sm text-gold">{formatCurrency(s.saleAmount)}</p>
+                )}
                 {s.notes && <p className="mt-1 text-sm text-muted-foreground">{s.notes}</p>}
                 <div className="mt-2">
                   <ShipmentActions

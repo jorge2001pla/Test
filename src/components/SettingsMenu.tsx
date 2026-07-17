@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function SettingsMenu() {
   const [open, setOpen] = useState(false);
@@ -31,7 +32,14 @@ export default function SettingsMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 z-20 min-w-[10rem] rounded-lg border border-border bg-card py-1 shadow-lg">
+        <div className="absolute right-0 top-11 z-20 min-w-[12rem] rounded-lg border border-border bg-card py-1 shadow-lg">
+          <Link
+            href="/promotions"
+            onClick={() => setOpen(false)}
+            className="block px-4 py-2 text-sm text-foreground hover:bg-gold/10 hover:text-gold"
+          >
+            Promotions
+          </Link>
           <Link
             href="/import"
             onClick={() => setOpen(false)}
@@ -39,6 +47,23 @@ export default function SettingsMenu() {
           >
             Import Clients
           </Link>
+          <Link
+            href="/import-values"
+            onClick={() => setOpen(false)}
+            className="block px-4 py-2 text-sm text-foreground hover:bg-gold/10 hover:text-gold"
+          >
+            Import Client Values
+          </Link>
+          <a
+            href="/api/export-book"
+            className="block px-4 py-2 text-sm text-foreground hover:bg-gold/10 hover:text-gold"
+          >
+            Export Book (CSV)
+          </a>
+          <div className="mt-1 flex items-center justify-between border-t border-border px-4 py-2">
+            <span className="text-sm text-foreground">Theme</span>
+            <ThemeToggle />
+          </div>
         </div>
       )}
     </div>

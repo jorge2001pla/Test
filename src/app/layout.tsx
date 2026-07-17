@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import "./globals.css";
 import ThemeScript from "@/components/ThemeScript";
-import ThemeToggle from "@/components/ThemeToggle";
 import SpotPriceTicker from "@/components/SpotPriceTicker";
 import SalesQuoteBanner from "@/components/SalesQuoteBanner";
 import SettingsMenu from "@/components/SettingsMenu";
@@ -86,7 +85,6 @@ export default function RootLayout({
             <div className="ml-auto flex items-center gap-4">
               <SpotPriceTicker />
               <SettingsMenu />
-              <ThemeToggle />
             </div>
           </nav>
         </header>

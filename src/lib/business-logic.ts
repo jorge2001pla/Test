@@ -5,6 +5,32 @@ const WINDOW_DAYS = 15;
 /** Starting weekly target for new book clients (Thursday–Wednesday week). Bump this as the goal grows. */
 export const WEEKLY_GOAL = 10;
 
+export type ValueTier = "whale" | "wahoo" | "snapper" | null;
+
+export const VALUE_TIER_THRESHOLDS: Record<Exclude<ValueTier, null>, number> = {
+  whale: 50_000,
+  wahoo: 25_000,
+  snapper: 10_000,
+};
+
+export const VALUE_TIER_LABELS: Record<Exclude<ValueTier, null>, string> = {
+  whale: "Whale",
+  wahoo: "Wahoo",
+  snapper: "Snapper",
+};
+
+/** Lifetime-value tier for a book client — null below the Snapper floor. */
+export function valueTier(lifetimeValue: number): ValueTier {
+  if (lifetimeValue >= VALUE_TIER_THRESHOLDS.whale) return "whale";
+  if (lifetimeValue >= VALUE_TIER_THRESHOLDS.wahoo) return "wahoo";
+  if (lifetimeValue >= VALUE_TIER_THRESHOLDS.snapper) return "snapper";
+  return null;
+}
+
+/** The stated business goal: 100 Whale-tier clients, i.e. a $5M book at the Whale floor. */
+export const WHALE_GOAL_COUNT = 100;
+export const WHALE_GOAL_VALUE = WHALE_GOAL_COUNT * VALUE_TIER_THRESHOLDS.whale;
+
 function toMidnightUTC(date: Date): number {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
@@ -306,6 +332,7 @@ interface BacklogClient {
   lastContactAt: string | null;
   firstName: string | null;
   lastName: string | null;
+  lifetimeValue: number;
 }
 
 export type BacklogKind = "dormant" | "never-contacted";
@@ -319,7 +346,8 @@ export interface BacklogEntry<T extends BacklogClient> {
  * The "Work the Book" queue: clients worth proactively calling when nothing else is due.
  * Cold-after-contact clients rank first (you have history/notes, warmer re-engagement) followed
  * by never-contacted clients — which covers both the bulk-imported legacy book and any manual
- * add that aged out of the never-called nudge without ever getting a call.
+ * add that aged out of the never-called nudge without ever getting a call. Within each group,
+ * biggest lifetime value goes first — your Whales get worked before your smaller clients.
  */
 export function buildWorkTheBookQueue<T extends BacklogClient>(
   clients: T[],
@@ -329,14 +357,19 @@ export function buildWorkTheBookQueue<T extends BacklogClient>(
     .filter(
       (c) => c.status !== "NOT_INTERESTED" && c.lastContactAt !== null && daysSince(c.lastContactAt, now) >= DORMANT_DAYS
     )
-    .sort((a, b) => (a.lastContactAt as string).localeCompare(b.lastContactAt as string))
+    .sort(
+      (a, b) =>
+        b.lifetimeValue - a.lifetimeValue || (a.lastContactAt as string).localeCompare(b.lastContactAt as string)
+    )
     .map((client) => ({ client, kind: "dormant" as const }));
 
   const neverContacted = clients
     .filter((c) => c.lastContactAt === null && c.status !== "NOT_INTERESTED")
     .sort(
       (a, b) =>
-        (a.lastName ?? "").localeCompare(b.lastName ?? "") || (a.firstName ?? "").localeCompare(b.firstName ?? "")
+        b.lifetimeValue - a.lifetimeValue ||
+        (a.lastName ?? "").localeCompare(b.lastName ?? "") ||
+        (a.firstName ?? "").localeCompare(b.firstName ?? "")
     )
     .map((client) => ({ client, kind: "never-contacted" as const }));
 

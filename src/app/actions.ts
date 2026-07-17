@@ -10,7 +10,14 @@ import {
   unlinkClientFromBook,
   type NewClientInput,
 } from "@/lib/clients";
-import { addBookCallLogEntry, createBookClient, deleteBookClient, getBookClient } from "@/lib/book";
+import {
+  addBookCallLogEntry,
+  createBookClient,
+  deleteBookClient,
+  getBookClient,
+  listBookClients,
+  setLifetimeValue,
+} from "@/lib/book";
 import {
   createShipment,
   markDelivered,
@@ -21,6 +28,13 @@ import {
 } from "@/lib/shipments";
 import { createReminder, deleteReminder, setReminderDone } from "@/lib/reminders";
 import { createNote, deleteNote } from "@/lib/notes";
+import {
+  createPromotion,
+  endPromotion,
+  getActivePromotion,
+  markAllEmailed,
+  markAllTexted,
+} from "@/lib/promotions";
 import type { ClientStatus } from "@/lib/types";
 import { CLIENT_STATUSES } from "@/lib/types";
 
@@ -99,7 +113,14 @@ export async function addBookCallLogAction(formData: FormData): Promise<void> {
       ? `${scheduledDate}T${scheduledTime}`
       : null;
 
-  await addBookCallLogEntry(bookClientId, noteText, resultingStatus, callbackScheduledAt);
+  const activePromo = await getActivePromotion();
+  await addBookCallLogEntry(
+    bookClientId,
+    noteText,
+    resultingStatus,
+    callbackScheduledAt,
+    activePromo?.id ?? null
+  );
   revalidatePath("/");
   revalidatePath(`/book/${bookClientId}`);
   revalidatePath("/book");
@@ -193,6 +214,7 @@ export async function createShipmentAction(formData: FormData): Promise<void> {
   const carrierRaw = String(formData.get("carrier") ?? "");
   const trackingLink = String(formData.get("trackingLink") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
+  const saleAmountRaw = String(formData.get("saleAmount") ?? "").trim();
 
   if (!bookClientId || !trackingLink) {
     throw new Error("Tracking link is required.");
@@ -206,6 +228,7 @@ export async function createShipmentAction(formData: FormData): Promise<void> {
     carrier: (CARRIERS as string[]).includes(carrierRaw) ? (carrierRaw as Carrier) : "Other",
     trackingLink,
     notes: notes || null,
+    saleAmount: saleAmountRaw ? Number(saleAmountRaw) : null,
   });
   revalidatePath("/");
   revalidatePath(`/book/${bookClientId}`);
@@ -307,8 +330,98 @@ export async function quickLogBookCallAction(input: QuickCallInput): Promise<voi
   if (!input.id || !noteText) {
     throw new Error("A call note is required.");
   }
-  await addBookCallLogEntry(input.id, noteText, input.resultingStatus, callbackScheduledAtFrom(input));
+  const activePromo = await getActivePromotion();
+  await addBookCallLogEntry(
+    input.id,
+    noteText,
+    input.resultingStatus,
+    callbackScheduledAtFrom(input),
+    activePromo?.id ?? null
+  );
   revalidatePath("/");
   revalidatePath(`/book/${input.id}`);
   revalidatePath("/book");
+}
+
+export async function updateLifetimeValueAction(bookClientId: string, value: number): Promise<void> {
+  if (!bookClientId || !Number.isFinite(value) || value < 0) {
+    throw new Error("A valid value is required.");
+  }
+  await setLifetimeValue(bookClientId, value);
+  revalidatePath("/");
+  revalidatePath(`/book/${bookClientId}`);
+  revalidatePath("/book");
+  revalidatePath("/reactivate");
+}
+
+export async function createPromotionAction(formData: FormData): Promise<void> {
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  if (!name) {
+    throw new Error("Promotion name is required.");
+  }
+  await createPromotion(name, description || null);
+  revalidatePath("/");
+  revalidatePath("/promotions");
+}
+
+export async function markAllEmailedAction(promotionId: string): Promise<void> {
+  await markAllEmailed(promotionId);
+  revalidatePath("/promotions");
+}
+
+export async function markAllTextedAction(promotionId: string): Promise<void> {
+  await markAllTexted(promotionId);
+  revalidatePath("/promotions");
+}
+
+export async function endPromotionAction(promotionId: string): Promise<void> {
+  await endPromotion(promotionId);
+  revalidatePath("/");
+  revalidatePath("/promotions");
+}
+
+export interface ValueImportRow {
+  name: string;
+  phone?: string;
+  value: number;
+}
+
+export interface ValueImportResult {
+  matched: number;
+  unmatched: string[];
+}
+
+/** Matches CRM export rows against the existing book by phone first, then exact name, and sets
+ * each matched client's lifetime value. Returns names that couldn't be matched to anyone. */
+export async function importClientValuesAction(rows: ValueImportRow[]): Promise<ValueImportResult> {
+  const existing = await listBookClients();
+  const byPhone = new Map<string, (typeof existing)[number]>();
+  const byName = new Map<string, (typeof existing)[number]>();
+  const digitsOnly = (s: string) => s.replace(/\D/g, "");
+  for (const c of existing) {
+    if (c.phone) byPhone.set(digitsOnly(c.phone), c);
+    const full = `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim().toLowerCase();
+    if (full) byName.set(full, c);
+  }
+
+  let matched = 0;
+  const unmatched: string[] = [];
+
+  for (const row of rows) {
+    if (!row.name || !Number.isFinite(row.value)) continue;
+    const client =
+      (row.phone && byPhone.get(digitsOnly(row.phone))) || byName.get(row.name.trim().toLowerCase());
+    if (client) {
+      await setLifetimeValue(client.id, row.value);
+      matched += 1;
+    } else {
+      unmatched.push(row.name);
+    }
+  }
+
+  revalidatePath("/");
+  revalidatePath("/book");
+  revalidatePath("/reactivate");
+  return { matched, unmatched };
 }

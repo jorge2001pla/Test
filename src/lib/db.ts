@@ -26,8 +26,17 @@ async function ensureSchema(): Promise<void> {
       status TEXT NOT NULL DEFAULT 'NO_DISPO' CHECK(status IN ${STATUS_CHECK}),
       notes TEXT,
       callback_scheduled_at TEXT,
+      lifetime_value REAL NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS promotions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS book_call_log_entries (
@@ -35,10 +44,22 @@ async function ensureSchema(): Promise<void> {
       book_client_id TEXT NOT NULL REFERENCES book_clients(id) ON DELETE CASCADE,
       timestamp TEXT NOT NULL DEFAULT (datetime('now')),
       note_text TEXT NOT NULL,
-      resulting_status TEXT NOT NULL CHECK(resulting_status IN ${STATUS_CHECK})
+      resulting_status TEXT NOT NULL CHECK(resulting_status IN ${STATUS_CHECK}),
+      promotion_id TEXT REFERENCES promotions(id) ON DELETE SET NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_book_call_log_client ON book_call_log_entries(book_client_id);
+
+    CREATE TABLE IF NOT EXISTS promotion_touches (
+      id TEXT PRIMARY KEY,
+      promotion_id TEXT NOT NULL REFERENCES promotions(id) ON DELETE CASCADE,
+      book_client_id TEXT NOT NULL REFERENCES book_clients(id) ON DELETE CASCADE,
+      emailed_at TEXT,
+      texted_at TEXT,
+      UNIQUE(promotion_id, book_client_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_promotion_touches_promo ON promotion_touches(promotion_id);
 
     CREATE TABLE IF NOT EXISTS shipments (
       id TEXT PRIMARY KEY,
@@ -46,6 +67,7 @@ async function ensureSchema(): Promise<void> {
       carrier TEXT NOT NULL,
       tracking_link TEXT NOT NULL,
       notes TEXT,
+      sale_amount REAL,
       shipped_at TEXT NOT NULL DEFAULT (datetime('now')),
       shipped_call_done INTEGER NOT NULL DEFAULT 0,
       delivered_at TEXT,
@@ -103,6 +125,9 @@ async function ensureSchema(): Promise<void> {
   // created_at is just "when it was imported," not a real intake date) is excluded from the
   // never-called-yet nudge; createBookClient explicitly overrides this to 'manual' going forward.
   await addColumnIfMissing("book_clients", "source", "TEXT NOT NULL DEFAULT 'import'");
+  await addColumnIfMissing("book_clients", "lifetime_value", "REAL NOT NULL DEFAULT 0");
+  await addColumnIfMissing("shipments", "sale_amount", "REAL");
+  await addColumnIfMissing("book_call_log_entries", "promotion_id", "TEXT REFERENCES promotions(id) ON DELETE SET NULL");
 
   // shipments.tracking_number became tracking_link (holds a pasted USPS/FedEx tracking URL now,
   // not just a raw number) — rename the column on any table created before this change.
