@@ -44,7 +44,7 @@ async function ensureSchema(): Promise<void> {
       id TEXT PRIMARY KEY,
       book_client_id TEXT NOT NULL REFERENCES book_clients(id) ON DELETE CASCADE,
       carrier TEXT NOT NULL,
-      tracking_number TEXT NOT NULL,
+      tracking_link TEXT NOT NULL,
       notes TEXT,
       shipped_at TEXT NOT NULL DEFAULT (datetime('now')),
       shipped_call_done INTEGER NOT NULL DEFAULT 0,
@@ -103,6 +103,15 @@ async function ensureSchema(): Promise<void> {
   // created_at is just "when it was imported," not a real intake date) is excluded from the
   // never-called-yet nudge; createBookClient explicitly overrides this to 'manual' going forward.
   await addColumnIfMissing("book_clients", "source", "TEXT NOT NULL DEFAULT 'import'");
+
+  // shipments.tracking_number became tracking_link (holds a pasted USPS/FedEx tracking URL now,
+  // not just a raw number) — rename the column on any table created before this change.
+  try {
+    await db.execute("ALTER TABLE shipments RENAME COLUMN tracking_number TO tracking_link");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!/no such column/i.test(message)) throw err;
+  }
 }
 
 async function addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {

@@ -36,6 +36,7 @@ import NoteItem from "@/components/NoteItem";
 import WeeklyTrendChart from "@/components/WeeklyTrendChart";
 import QuickLogCall from "@/components/QuickLogCall";
 import PhoneLink from "@/components/PhoneLink";
+import TrackingLink from "@/components/TrackingLink";
 import { createReminderAction, createNoteAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -451,7 +452,7 @@ export default async function DashboardPage({
                         <PhoneLink phone={s.clientPhone} />
                       </td>
                       <td className="px-4 py-3 text-foreground">
-                        {s.carrier} — {s.trackingNumber}
+                        <TrackingLink carrier={s.carrier} trackingLink={s.trackingLink} />
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {formatDate(s.shippedAt)}

@@ -8,6 +8,7 @@ import StatusBadge from "@/components/StatusBadge";
 import CallbackScheduleFields from "@/components/CallbackScheduleFields";
 import ShipmentActions from "@/components/ShipmentActions";
 import PhoneLink from "@/components/PhoneLink";
+import TrackingLink from "@/components/TrackingLink";
 import { addBookCallLogAction, createShipmentAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -94,16 +95,17 @@ export default async function BookClientDetailPage({
               ))}
             </select>
           </div>
-          <div>
-            <label className="mb-1 block text-sm text-muted-foreground" htmlFor="trackingNumber">
-              Tracking Number
+          <div className="flex-1 min-w-[14rem]">
+            <label className="mb-1 block text-sm text-muted-foreground" htmlFor="trackingLink">
+              Tracking Link
             </label>
             <input
-              id="trackingNumber"
-              name="trackingNumber"
-              type="text"
+              id="trackingLink"
+              name="trackingLink"
+              type="url"
               required
-              className="rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
+              placeholder="Paste the USPS or FedEx tracking link"
+              className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
             />
           </div>
           <div className="flex-1 min-w-[10rem]">
@@ -132,7 +134,7 @@ export default async function BookClientDetailPage({
               <li key={s.id} className="rounded border border-border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span className="font-medium text-foreground">
-                    {s.carrier} — {s.trackingNumber}
+                    <TrackingLink carrier={s.carrier} trackingLink={s.trackingLink} />
                   </span>
                   <span className="text-muted-foreground">
                     Shipped {formatDate(s.shippedAt)}

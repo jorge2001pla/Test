@@ -191,11 +191,11 @@ export async function removeClientFromBookAction(clientId: string): Promise<void
 export async function createShipmentAction(formData: FormData): Promise<void> {
   const bookClientId = String(formData.get("bookClientId") ?? "");
   const carrierRaw = String(formData.get("carrier") ?? "");
-  const trackingNumber = String(formData.get("trackingNumber") ?? "").trim();
+  const trackingLink = String(formData.get("trackingLink") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
 
-  if (!bookClientId || !trackingNumber) {
-    throw new Error("Tracking number is required.");
+  if (!bookClientId || !trackingLink) {
+    throw new Error("Tracking link is required.");
   }
 
   const client = await getBookClient(bookClientId);
@@ -204,7 +204,7 @@ export async function createShipmentAction(formData: FormData): Promise<void> {
   await createShipment({
     bookClientId,
     carrier: (CARRIERS as string[]).includes(carrierRaw) ? (carrierRaw as Carrier) : "Other",
-    trackingNumber,
+    trackingLink,
     notes: notes || null,
   });
   revalidatePath("/");

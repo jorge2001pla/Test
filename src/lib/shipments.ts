@@ -10,7 +10,7 @@ export interface Shipment {
   id: string;
   bookClientId: string;
   carrier: Carrier;
-  trackingNumber: string;
+  trackingLink: string;
   notes: string | null;
   shippedAt: string;
   shippedCallDone: boolean;
@@ -29,7 +29,7 @@ interface ShipmentRowDb {
   id: string;
   book_client_id: string;
   carrier: Carrier;
-  tracking_number: string;
+  tracking_link: string;
   notes: string | null;
   shipped_at: string;
   shipped_call_done: number;
@@ -44,7 +44,7 @@ function mapShipment(row: ShipmentRowDb): Shipment {
     id: row.id,
     bookClientId: row.book_client_id,
     carrier: row.carrier,
-    trackingNumber: row.tracking_number,
+    trackingLink: row.tracking_link,
     notes: row.notes,
     shippedAt: row.shipped_at,
     shippedCallDone: !!row.shipped_call_done,
@@ -91,7 +91,7 @@ export async function listActiveShipments(): Promise<ShipmentWithClient[]> {
 export interface NewShipmentInput {
   bookClientId: string;
   carrier: Carrier;
-  trackingNumber: string;
+  trackingLink: string;
   notes?: string | null;
 }
 
@@ -100,9 +100,9 @@ export async function createShipment(input: NewShipmentInput): Promise<Shipment>
   const id = randomUUID();
   const now = localDateTimeString();
   await db.execute({
-    sql: `INSERT INTO shipments (id, book_client_id, carrier, tracking_number, notes, shipped_at, created_at, updated_at)
+    sql: `INSERT INTO shipments (id, book_client_id, carrier, tracking_link, notes, shipped_at, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [id, input.bookClientId, input.carrier, input.trackingNumber, input.notes ?? null, now, now, now],
+    args: [id, input.bookClientId, input.carrier, input.trackingLink, input.notes ?? null, now, now, now],
   });
   const res = await db.execute({ sql: "SELECT * FROM shipments WHERE id = ?", args: [id] });
   return mapShipment(res.rows[0] as unknown as ShipmentRowDb);
