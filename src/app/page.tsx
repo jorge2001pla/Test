@@ -9,7 +9,13 @@ import {
 import { listActiveShipments, listShipmentsNeedingCallToday } from "@/lib/shipments";
 import { listActiveReminders } from "@/lib/reminders";
 import { listNotes } from "@/lib/notes";
-import { getActivePromotion, getPromotionProgress, listNotCalledAboutPromotion } from "@/lib/promotions";
+import {
+  listActivePromotions,
+  getPromotionProgress,
+  listClientsNotCalledSince,
+  type Promotion,
+  type PromotionProgress,
+} from "@/lib/promotions";
 import {
   buildFollowUpSections,
   buildTodaysPriority,
@@ -46,6 +52,26 @@ export const dynamic = "force-dynamic";
 
 function monthParam(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
+
+function CampaignCard({ promo, progress }: { promo: Promotion; progress: PromotionProgress }) {
+  const href = promo.kind === "COIN_OF_WEEK" ? "/coin-of-the-week" : "/promotions";
+  const label = promo.kind === "COIN_OF_WEEK" ? "Coin of the Week" : "Active Promotion";
+  return (
+    <Link
+      href={href}
+      className="block rounded-lg border border-gold/40 bg-card p-5 transition-[border-color,box-shadow] hover:shadow-sm"
+    >
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 font-display text-lg font-semibold text-foreground">{promo.name}</p>
+      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+        <span className="text-gold">{progress.emailedCount} emailed</span>
+        <span className="text-gold">{progress.textedCount} texted</span>
+        <span className="text-gold">{progress.calledCount} called</span>
+        <span className="text-muted-foreground">of {progress.totalClients}</span>
+      </div>
+    </Link>
+  );
 }
 
 /** Row shape used while building the list — adds sort/grouping fields dropped before rendering. */
@@ -92,12 +118,24 @@ export default async function DashboardPage({
   const workQueue = buildWorkTheBookQueue(bookClients, now);
   const dormantCount = workQueue.filter((e) => e.kind === "dormant").length;
 
-  const activePromotion = await getActivePromotion();
-  const [promotionProgress, promoTargets, valueStats] = await Promise.all([
-    activePromotion ? getPromotionProgress(activePromotion.id) : Promise.resolve(null),
-    activePromotion ? listNotCalledAboutPromotion(activePromotion.id) : Promise.resolve([]),
+  const activePromotions = await listActivePromotions();
+  // A single call counts toward every active campaign, so a client only clears the queue once
+  // they've been called since the most-recently-started campaign began.
+  const newestCampaignStart = activePromotions.reduce<string | null>(
+    (max, p) => (max === null || p.createdAt > max ? p.createdAt : max),
+    null
+  );
+  const [campaignCards, promoTargets, valueStats] = await Promise.all([
+    Promise.all(
+      activePromotions.map(async (p) => ({
+        promo: p,
+        progress: await getPromotionProgress(p.id),
+      }))
+    ),
+    newestCampaignStart ? listClientsNotCalledSince(newestCampaignStart) : Promise.resolve([]),
     getBookValueStats(VALUE_TIER_THRESHOLDS.whale),
   ]);
+  const newestCampaign = activePromotions.find((p) => p.createdAt === newestCampaignStart) ?? null;
 
   const neverCalled15Day = clients.filter(
     (c) => c.lastCallNote === null && isNearingExpiryUncalled(c.firstSaleDate, now)
@@ -234,7 +272,7 @@ export default async function DashboardPage({
   // the list toward the daily target (a promo push shouldn't itself blow past the target).
   const dueTodayIds = new Set(dueTodayRows.map((r) => r.id));
   const promoFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length);
-  const promoRows: BuildRow[] = activePromotion
+  const promoRows: BuildRow[] = newestCampaign
     ? promoTargets
         .filter((c) => !dueTodayIds.has(c.id))
         .slice(0, promoFillCount)
@@ -244,7 +282,7 @@ export default async function DashboardPage({
           phone: c.phone ?? "—",
           href: `/book/${c.id}`,
           status: c.status,
-          reasonLabel: `Promo — ${activePromotion.name}`,
+          reasonLabel: activePromotions.length > 1 ? "Campaign — call needed" : `Promo — ${newestCampaign.name}`,
           sortKey: "",
           tier: 3,
           kind: "book" as const,
@@ -384,26 +422,18 @@ export default async function DashboardPage({
           </p>
         </div>
 
-        {activePromotion && promotionProgress ? (
-          <Link
-            href="/promotions"
-            className="block rounded-lg border border-gold/40 bg-card p-5 transition-[border-color,box-shadow] hover:shadow-sm"
-          >
-            <h2 className="font-display text-lg font-semibold text-foreground">Active Promotion</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{activePromotion.name}</p>
-            <div className="mt-3 flex flex-wrap gap-4 text-sm">
-              <span className="text-gold">{promotionProgress.emailedCount} emailed</span>
-              <span className="text-gold">{promotionProgress.textedCount} texted</span>
-              <span className="text-gold">{promotionProgress.calledCount} called</span>
-              <span className="text-muted-foreground">of {promotionProgress.totalClients}</span>
-            </div>
-          </Link>
+        {campaignCards.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4">
+            {campaignCards.map(({ promo, progress }) => (
+              <CampaignCard key={promo.id} promo={promo} progress={progress} />
+            ))}
+          </div>
         ) : (
           <Link
             href="/promotions"
             className="flex flex-col justify-center rounded-lg border border-dashed border-border bg-card p-5 text-center transition-colors hover:border-gold"
           >
-            <span className="text-sm text-muted-foreground">No active promotion — start one</span>
+            <span className="text-sm text-muted-foreground">No active campaign — start a promotion</span>
           </Link>
         )}
       </div>
@@ -474,9 +504,12 @@ export default async function DashboardPage({
                 <p className="mt-2 text-xs text-muted-foreground">
                   {promoRows.length > 0 && (
                     <>
-                      {promoRows.length} from the active{" "}
-                      <Link href="/promotions" className="underline hover:text-gold">
-                        promotion
+                      {promoRows.length} from your active{" "}
+                      <Link
+                        href={newestCampaign?.kind === "COIN_OF_WEEK" ? "/coin-of-the-week" : "/promotions"}
+                        className="underline hover:text-gold"
+                      >
+                        {activePromotions.length > 1 ? "campaigns" : "campaign"}
                       </Link>
                       {backlogRows.length > 0 && ", "}
                     </>

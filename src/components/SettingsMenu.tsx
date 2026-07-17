@@ -34,13 +34,6 @@ export default function SettingsMenu() {
       {open && (
         <div className="absolute right-0 top-11 z-20 min-w-[12rem] rounded-lg border border-border bg-card py-1 shadow-lg">
           <Link
-            href="/promotions"
-            onClick={() => setOpen(false)}
-            className="block px-4 py-2 text-sm text-foreground hover:bg-gold/10 hover:text-gold"
-          >
-            Promotions
-          </Link>
-          <Link
             href="/import"
             onClick={() => setOpen(false)}
             className="block px-4 py-2 text-sm text-foreground hover:bg-gold/10 hover:text-gold"

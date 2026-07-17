@@ -34,6 +34,7 @@ import {
   getActivePromotion,
   markAllEmailed,
   markAllTexted,
+  type PromotionKind,
 } from "@/lib/promotions";
 import type { ClientStatus } from "@/lib/types";
 import { CLIENT_STATUSES } from "@/lib/types";
@@ -357,28 +358,33 @@ export async function updateLifetimeValueAction(bookClientId: string, value: num
 export async function createPromotionAction(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
+  const kind: PromotionKind = String(formData.get("kind") ?? "") === "COIN_OF_WEEK" ? "COIN_OF_WEEK" : "PROMOTION";
   if (!name) {
-    throw new Error("Promotion name is required.");
+    throw new Error("Campaign name is required.");
   }
-  await createPromotion(name, description || null);
+  await createPromotion(name, description || null, kind);
   revalidatePath("/");
   revalidatePath("/promotions");
+  revalidatePath("/coin-of-the-week");
 }
 
 export async function markAllEmailedAction(promotionId: string): Promise<void> {
   await markAllEmailed(promotionId);
   revalidatePath("/promotions");
+  revalidatePath("/coin-of-the-week");
 }
 
 export async function markAllTextedAction(promotionId: string): Promise<void> {
   await markAllTexted(promotionId);
   revalidatePath("/promotions");
+  revalidatePath("/coin-of-the-week");
 }
 
 export async function endPromotionAction(promotionId: string): Promise<void> {
   await endPromotion(promotionId);
   revalidatePath("/");
   revalidatePath("/promotions");
+  revalidatePath("/coin-of-the-week");
 }
 
 export interface ValueImportRow {
