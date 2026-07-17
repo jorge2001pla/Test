@@ -65,12 +65,10 @@ export default function RootLayout({
                 priority
                 className="h-8 w-8"
               />
-              <span className="font-sans text-lg font-bold tracking-tight text-header-foreground">
-                Premier <span className="text-gold-bright">Rare Coins</span>
-              </span>
+              <span className="font-sans text-lg font-bold tracking-widest text-gold-bright">PRC</span>
             </Link>
 
-            <div className="flex flex-wrap gap-x-5 gap-y-1 font-sans text-base font-medium text-header-foreground">
+            <div className="flex flex-wrap gap-x-6 gap-y-1 font-sans text-sm font-semibold uppercase tracking-widest text-header-foreground">
               {NAV_LINKS.map((link) => (
                 <Link
                   key={link.href}
