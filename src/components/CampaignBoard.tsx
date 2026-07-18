@@ -29,9 +29,9 @@ export default async function CampaignBoard({ kind, copy }: { kind: PromotionKin
   const past = promotions.filter((p) => p.id !== active?.id);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl font-semibold text-foreground">{copy.title}</h1>
+        <h2 className="font-display text-xl font-semibold text-foreground">{copy.title}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
       </div>
 

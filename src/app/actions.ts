@@ -364,27 +364,23 @@ export async function createPromotionAction(formData: FormData): Promise<void> {
   }
   await createPromotion(name, description || null, kind);
   revalidatePath("/");
-  revalidatePath("/promotions");
-  revalidatePath("/coin-of-the-week");
+  revalidatePath("/campaigns");
 }
 
 export async function markAllEmailedAction(promotionId: string): Promise<void> {
   await markAllEmailed(promotionId);
-  revalidatePath("/promotions");
-  revalidatePath("/coin-of-the-week");
+  revalidatePath("/campaigns");
 }
 
 export async function markAllTextedAction(promotionId: string): Promise<void> {
   await markAllTexted(promotionId);
-  revalidatePath("/promotions");
-  revalidatePath("/coin-of-the-week");
+  revalidatePath("/campaigns");
 }
 
 export async function endPromotionAction(promotionId: string): Promise<void> {
   await endPromotion(promotionId);
   revalidatePath("/");
-  revalidatePath("/promotions");
-  revalidatePath("/coin-of-the-week");
+  revalidatePath("/campaigns");
 }
 
 export interface ValueImportRow {

@@ -55,7 +55,7 @@ function monthParam(year: number, month: number): string {
 }
 
 function CampaignCard({ promo, progress }: { promo: Promotion; progress: PromotionProgress }) {
-  const href = promo.kind === "COIN_OF_WEEK" ? "/coin-of-the-week" : "/promotions";
+  const href = "/campaigns";
   const label = promo.kind === "COIN_OF_WEEK" ? "Coin of the Week" : "Active Promotion";
   return (
     <Link
@@ -430,7 +430,7 @@ export default async function DashboardPage({
           </div>
         ) : (
           <Link
-            href="/promotions"
+            href="/campaigns"
             className="flex flex-col justify-center rounded-lg border border-dashed border-border bg-card p-5 text-center transition-colors hover:border-gold"
           >
             <span className="text-sm text-muted-foreground">No active campaign — start a promotion</span>
@@ -506,7 +506,7 @@ export default async function DashboardPage({
                     <>
                       {promoRows.length} from your active{" "}
                       <Link
-                        href={newestCampaign?.kind === "COIN_OF_WEEK" ? "/coin-of-the-week" : "/promotions"}
+                        href="/campaigns"
                         className="underline hover:text-gold"
                       >
                         {activePromotions.length > 1 ? "campaigns" : "campaign"}

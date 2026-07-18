@@ -36,8 +36,7 @@ const NAV_LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/follow-up", label: "50% Follow-Up" },
   { href: "/book", label: "Clients" },
-  { href: "/promotions", label: "Promotions" },
-  { href: "/coin-of-the-week", label: "Coin of the Week" },
+  { href: "/campaigns", label: "Campaigns" },
 ];
 
 export default function RootLayout({
