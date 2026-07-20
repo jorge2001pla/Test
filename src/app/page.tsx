@@ -77,8 +77,8 @@ function CampaignCard({ promo, progress }: { promo: Promotion; progress: Promoti
 /** Row shape used while building the list — adds sort/grouping fields dropped before rendering. */
 interface BuildRow extends PriorityRowData {
   sortKey: string;
-  /** 0 = 50% expiring soon, 1 = callback today, 2 = shipment needs a call, 3 = active promo
-   * not yet called, 4 = backlog fill. */
+  /** 0 = 50% expiring soon, 1 = callback today, 2 = shipment needs a call, 3 = no-answer today
+   * (circle back), 4 = active promo not yet called, 5 = backlog fill. */
   tier: number;
 }
 
@@ -266,9 +266,48 @@ export default async function DashboardPage({
     };
   });
 
-  const dueTodayRows: BuildRow[] = [...expiringSoonRows, ...callbackTodayRows, ...shipmentRows];
+  // Tier 3 — circle-backs: dispo'd Not Available today (no answer / left a VM). An attempt is
+  // not a completed touch — they stay on today's list so Jorge retries before end of day.
+  const retryRows: BuildRow[] = [
+    ...clients
+      .filter((c) => c.status === "NOT_AVAILABLE" && !!c.lastCallAt && c.lastCallAt >= todayStart)
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        href: `/clients/${c.id}`,
+        status: c.status,
+        reasonLabel: `No answer at ${formatTimeOnly(c.lastCallAt as string)} — circle back`,
+        sortKey: c.lastCallAt as string,
+        tier: 3,
+        kind: "client" as const,
+        muted: false,
+      })),
+    ...bookClients
+      .filter((c) => c.status === "NOT_AVAILABLE" && !!c.lastContactAt && c.lastContactAt >= todayStart)
+      .map((c) => ({
+        id: c.id,
+        name: [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unnamed",
+        phone: c.phone ?? "—",
+        href: `/book/${c.id}`,
+        status: c.status,
+        reasonLabel: `No answer at ${formatTimeOnly(c.lastContactAt as string)} — circle back`,
+        sortKey: c.lastContactAt as string,
+        tier: 3,
+        kind: "book" as const,
+        muted: false,
+      })),
+  ];
 
-  // Tier 3 — active promo push, not yet called, biggest clients first — only enough to round
+  const preRetryIds = new Set([...expiringSoonRows, ...callbackTodayRows, ...shipmentRows].map((r) => r.id));
+  const dueTodayRows: BuildRow[] = [
+    ...expiringSoonRows,
+    ...callbackTodayRows,
+    ...shipmentRows,
+    ...retryRows.filter((r) => !preRetryIds.has(r.id)),
+  ];
+
+  // Tier 4 — active promo push, not yet called, biggest clients first — only enough to round
   // the list toward the daily target (a promo push shouldn't itself blow past the target).
   const dueTodayIds = new Set(dueTodayRows.map((r) => r.id));
   const promoFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length);
@@ -284,14 +323,14 @@ export default async function DashboardPage({
           status: c.status,
           reasonLabel: activePromotions.length > 1 ? "Campaign — call needed" : `Promo — ${newestCampaign.name}`,
           sortKey: "",
-          tier: 3,
+          tier: 4,
           kind: "book" as const,
           muted: false,
         }))
     : [];
   for (const r of promoRows) dueTodayIds.add(r.id);
 
-  // Tier 4 — backlog fill, only enough to round the list out to the daily target.
+  // Tier 5 — backlog fill, only enough to round the list out to the daily target.
   const backlogFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length - promoRows.length);
   const backlogRows: BuildRow[] = workQueue
     .filter((e) => !dueTodayIds.has(e.client.id))
@@ -307,7 +346,7 @@ export default async function DashboardPage({
           ? `Backlog — cold ${daysSince(e.client.lastContactAt as string, now)} days`
           : "Backlog — never contacted",
       sortKey: "",
-      tier: 4,
+      tier: 5,
       kind: "book" as const,
       muted: true,
     }));

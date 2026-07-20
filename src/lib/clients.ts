@@ -61,6 +61,8 @@ export async function listClients(): Promise<Client[]> {
 
 export interface ClientWithPreview extends Client {
   lastCallNote: string | null;
+  /** Timestamp of the most recent call log entry, or null if never called. */
+  lastCallAt: string | null;
 }
 
 export async function listClientsWithLastCallNote(): Promise<ClientWithPreview[]> {
@@ -70,11 +72,22 @@ export async function listClientsWithLastCallNote(): Promise<ClientWithPreview[]
        SELECT note_text FROM call_log_entries
        WHERE client_id = c.id
        ORDER BY timestamp DESC LIMIT 1
-     ) AS last_call_note
+     ) AS last_call_note, (
+       SELECT timestamp FROM call_log_entries
+       WHERE client_id = c.id
+       ORDER BY timestamp DESC LIMIT 1
+     ) AS last_call_at
      FROM clients c`
   );
-  const rows = res.rows as unknown as (ClientRowDb & { last_call_note: string | null })[];
-  return rows.map((row) => ({ ...mapClient(row), lastCallNote: row.last_call_note }));
+  const rows = res.rows as unknown as (ClientRowDb & {
+    last_call_note: string | null;
+    last_call_at: string | null;
+  })[];
+  return rows.map((row) => ({
+    ...mapClient(row),
+    lastCallNote: row.last_call_note,
+    lastCallAt: row.last_call_at,
+  }));
 }
 
 export async function getClient(id: string): Promise<ClientWithCallLog | undefined> {

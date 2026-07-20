@@ -28,9 +28,20 @@ export interface PriorityRowData {
 
 export default function PriorityRowItem({ row }: { row: PriorityRowData }) {
   const [hidden, setHidden] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const [pending, startTransition] = useTransition();
 
   if (hidden) return null;
+
+  // A Not Available dispo is an attempt, not a completed touch — keep the row on today's list
+  // (relabeled as a circle-back) so the client isn't forgotten before end of day.
+  function handleLogged(resultingStatus: ClientStatus) {
+    if (resultingStatus === "NOT_AVAILABLE") {
+      setAttempted(true);
+    } else {
+      setHidden(true);
+    }
+  }
 
   function handleShipmentDone() {
     const action = row.shipmentAction;
@@ -56,10 +67,10 @@ export default function PriorityRowItem({ row }: { row: PriorityRowData }) {
         <PhoneLink phone={row.phone} />
       </td>
       <td className={row.muted ? "px-4 py-3 text-muted-foreground" : "px-4 py-3 text-foreground"}>
-        {row.reasonLabel}
+        {attempted ? "No answer — circle back before end of day" : row.reasonLabel}
       </td>
       <td className="px-4 py-3">
-        <StatusBadge status={row.status} />
+        <StatusBadge status={attempted ? "NOT_AVAILABLE" : row.status} />
       </td>
       <td className="px-4 py-3">
         {row.shipmentAction ? (
@@ -76,7 +87,7 @@ export default function PriorityRowItem({ row }: { row: PriorityRowData }) {
                 : "Called — Delivered"}
           </button>
         ) : (
-          <QuickLogCall id={row.id} kind={row.kind} onLogged={() => setHidden(true)} />
+          <QuickLogCall id={row.id} kind={row.kind} onLogged={handleLogged} />
         )}
       </td>
     </tr>

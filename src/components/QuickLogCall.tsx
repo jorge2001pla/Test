@@ -15,8 +15,9 @@ export default function QuickLogCall({
 }: {
   id: string;
   kind: "client" | "book";
-  /** Called after a successful save — use to hide the row it lives in, for example. */
-  onLogged?: () => void;
+  /** Called after a successful save with the resulting status — a row can use this to hide
+   * itself on a final dispo but stay visible on Not Available (attempted, circle back later). */
+  onLogged?: (resultingStatus: ClientStatus) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
@@ -43,18 +44,24 @@ export default function QuickLogCall({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!note.trim()) return;
+    const resultingStatus = status;
     startTransition(async () => {
       const action = kind === "client" ? quickLogCallAction : quickLogBookCallAction;
       await action({
         id,
         noteText: note,
-        resultingStatus: status,
+        resultingStatus,
         callbackDate: date || undefined,
         callbackTime: time || undefined,
       });
-      setDone(true);
+      // Not Available is an attempt, not a completed touch — leave the button ready for the
+      // circle-back call instead of collapsing to "Logged".
+      if (resultingStatus !== "NOT_AVAILABLE") {
+        setDone(true);
+      }
+      setNote("");
       setOpen(false);
-      onLogged?.();
+      onLogged?.(resultingStatus);
     });
   }
 
