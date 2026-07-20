@@ -11,6 +11,7 @@ import StatusBadge from "@/components/StatusBadge";
 import ValueBadge from "@/components/ValueBadge";
 import QuickLogCall from "@/components/QuickLogCall";
 import PromotionActions from "@/components/PromotionActions";
+import ReactivateCampaignButton from "@/components/ReactivateCampaignButton";
 import { createPromotionAction } from "@/app/actions";
 
 interface CampaignCopy {
@@ -47,7 +48,7 @@ export default async function CampaignBoard({ kind, copy }: { kind: PromotionKin
                 Started {formatDate(active.createdAt.slice(0, 10))}
               </p>
             </div>
-            <PromotionActions promotionId={active.id} />
+            <PromotionActions promotionId={active.id} endLabel={`End ${copy.startLabel}`} />
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -133,7 +134,8 @@ export default async function CampaignBoard({ kind, copy }: { kind: PromotionKin
         </h2>
         {active && (
           <p className="mt-1 text-sm text-muted-foreground">
-            Starting a new one ends &quot;{active.name}&quot; automatically.
+            Starting a new one moves &quot;{active.name}&quot; to Past — its progress is kept, and
+            you can bring it back anytime with Reactivate.
           </p>
         )}
         <form action={createPromotionAction} className="mt-3 space-y-3">
@@ -179,7 +181,10 @@ export default async function CampaignBoard({ kind, copy }: { kind: PromotionKin
             {past.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                 <span className="font-medium text-foreground">{p.name}</span>
-                <span className="text-muted-foreground">{formatDate(p.createdAt.slice(0, 10))}</span>
+                <span className="flex items-center gap-3">
+                  <span className="text-muted-foreground">{formatDate(p.createdAt.slice(0, 10))}</span>
+                  <ReactivateCampaignButton promotionId={p.id} />
+                </span>
               </li>
             ))}
           </ul>

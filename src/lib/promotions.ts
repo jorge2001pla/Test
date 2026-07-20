@@ -91,6 +91,23 @@ export async function endPromotion(id: string): Promise<void> {
   await db.execute({ sql: "UPDATE promotions SET active = 0 WHERE id = ?", args: [id] });
 }
 
+/** Brings a past campaign back as the active one for its kind (swapping out whatever is
+ * currently active there). Its email/text touches and timestamp-based call progress were never
+ * deleted, so everything picks up right where it left off. */
+export async function reactivatePromotion(id: string): Promise<void> {
+  await ready();
+  await db.batch(
+    [
+      {
+        sql: "UPDATE promotions SET active = 0 WHERE active = 1 AND kind = (SELECT kind FROM promotions WHERE id = ?)",
+        args: [id],
+      },
+      { sql: "UPDATE promotions SET active = 1 WHERE id = ?", args: [id] },
+    ],
+    "write"
+  );
+}
+
 /** Marks every current book client as emailed/texted for a promotion, in one shot (upsert —
  * safe to call again after a re-send, it just refreshes the timestamp). */
 async function markAllTouched(promotionId: string, column: "emailed_at" | "texted_at"): Promise<number> {

@@ -34,6 +34,7 @@ import {
   getActivePromotion,
   markAllEmailed,
   markAllTexted,
+  reactivatePromotion,
   type PromotionKind,
 } from "@/lib/promotions";
 import type { ClientStatus } from "@/lib/types";
@@ -379,6 +380,12 @@ export async function markAllTextedAction(promotionId: string): Promise<void> {
 
 export async function endPromotionAction(promotionId: string): Promise<void> {
   await endPromotion(promotionId);
+  revalidatePath("/");
+  revalidatePath("/campaigns");
+}
+
+export async function reactivatePromotionAction(promotionId: string): Promise<void> {
+  await reactivatePromotion(promotionId);
   revalidatePath("/");
   revalidatePath("/campaigns");
 }

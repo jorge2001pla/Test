@@ -4,7 +4,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { markAllEmailedAction, markAllTextedAction, endPromotionAction } from "@/app/actions";
 
-export default function PromotionActions({ promotionId }: { promotionId: string }) {
+export default function PromotionActions({
+  promotionId,
+  endLabel = "End Promotion",
+}: {
+  promotionId: string;
+  endLabel?: string;
+}) {
   const [pending, startTransition] = useTransition();
   const [confirmEnd, setConfirmEnd] = useState(false);
   const router = useRouter();
@@ -55,7 +61,7 @@ export default function PromotionActions({ promotionId }: { promotionId: string 
           onClick={() => setConfirmEnd(true)}
           className="text-xs text-muted-foreground hover:text-foreground"
         >
-          End Promotion
+          {endLabel}
         </button>
       )}
     </div>
