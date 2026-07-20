@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { createClientAction } from "@/app/actions";
 import { CLIENT_STATUSES, STATUS_LABELS } from "@/lib/types";
+import { localDateString, nowET } from "@/lib/business-logic";
 
 const inputClass =
   "w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none";
 
 export default function NewClientPage() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString(nowET());
 
   return (
     <div className="max-w-xl">

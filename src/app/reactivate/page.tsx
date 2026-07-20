@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listBookClientsWithLastContact } from "@/lib/book";
-import { buildWorkTheBookQueue, DORMANT_DAYS, daysSince } from "@/lib/business-logic";
+import { buildWorkTheBookQueue, DORMANT_DAYS, daysSince, nowET } from "@/lib/business-logic";
 import { formatDate } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
 import PhoneLink from "@/components/PhoneLink";
@@ -10,7 +10,7 @@ import QuickLogCall from "@/components/QuickLogCall";
 export const dynamic = "force-dynamic";
 
 export default async function ReactivatePage() {
-  const now = new Date();
+  const now = nowET();
   const allClients = await listBookClientsWithLastContact();
   const queue = buildWorkTheBookQueue(allClients, now);
   const dormantCount = queue.filter((e) => e.kind === "dormant").length;

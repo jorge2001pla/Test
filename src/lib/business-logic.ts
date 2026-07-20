@@ -31,6 +31,21 @@ export function valueTier(lifetimeValue: number): ValueTier {
 export const WHALE_GOAL_COUNT = 100;
 export const WHALE_GOAL_VALUE = WHALE_GOAL_COUNT * VALUE_TIER_THRESHOLDS.whale;
 
+/** The business runs on Eastern time. Vercel servers run UTC, so every "what time/day is it"
+ * decision must go through nowET() rather than a bare `new Date()` — otherwise timestamps land
+ * ~4-5 hours ahead and evening activity rolls into tomorrow. */
+const APP_TIME_ZONE = "America/New_York";
+
+/** The given instant, shifted so its local components read Eastern wall-clock time. */
+export function toET(instant: Date): Date {
+  return new Date(instant.toLocaleString("en-US", { timeZone: APP_TIME_ZONE }));
+}
+
+/** Now, in Eastern wall-clock time — the default clock for all business logic. */
+export function nowET(): Date {
+  return toET(new Date());
+}
+
 function toMidnightUTC(date: Date): number {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
@@ -43,13 +58,13 @@ function daysBetween(from: Date, to: Date): number {
 /** Whole days between a stored date/datetime string's calendar date and `now`. Only the date
  * portion is used (safe for both plain dates and local datetime strings) to match the same
  * UTC-midnight diffing the 15-day window math relies on. */
-export function daysSince(dateOrDateTime: string, now: Date = new Date()): number {
+export function daysSince(dateOrDateTime: string, now: Date = nowET()): number {
   return daysBetween(new Date(dateOrDateTime.slice(0, 10)), now);
 }
 
 /** YYYY-MM-DDTHH:MM:SS in local wall-clock time — for timestamping "now" without SQLite's
  * datetime('now') UTC default, which can land on the wrong calendar day for the user's timezone. */
-export function localDateTimeString(d: Date = new Date()): string {
+export function localDateTimeString(d: Date = nowET()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -61,7 +76,7 @@ export function localDateTimeString(d: Date = new Date()): string {
 
 /** YYYY-MM-DD in local wall-clock time — used for "is this scheduled for today" comparisons,
  * since callback_scheduled_at is stored as the literal local date/time the user picked. */
-export function localDateString(d: Date = new Date()): string {
+export function localDateString(d: Date = nowET()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -69,7 +84,7 @@ export function localDateString(d: Date = new Date()): string {
 }
 
 /** Days left in the 15-day, 50%-commission window. Never negative, never manually set. */
-export function daysLeftInWindow(firstSaleDate: string, now: Date = new Date()): number {
+export function daysLeftInWindow(firstSaleDate: string, now: Date = nowET()): number {
   const since = daysBetween(new Date(firstSaleDate), now);
   return Math.max(0, WINDOW_DAYS - since);
 }
@@ -78,7 +93,7 @@ export function daysLeftInWindow(firstSaleDate: string, now: Date = new Date()):
  * True once the 15-day window has actually elapsed (day 16+), as opposed to a client on day 15
  * itself, whose daysLeft is also 0 but who is still in-window for one more day.
  */
-export function isWindowExpired(firstSaleDate: string, now: Date = new Date()): boolean {
+export function isWindowExpired(firstSaleDate: string, now: Date = nowET()): boolean {
   const since = daysBetween(new Date(firstSaleDate), now);
   return since > WINDOW_DAYS;
 }
@@ -150,7 +165,7 @@ function bySpendThenDaysLeft<T extends ClientLike>(a: FollowUpRow<T>, b: FollowU
  */
 export function buildFollowUpSections<T extends ClientLike>(
   clients: T[],
-  now: Date = new Date()
+  now: Date = nowET()
 ): FollowUpSections<T> {
   const rows = clients.map((c) => toRow(c, now));
 
@@ -196,7 +211,7 @@ export interface TodayPriorityRow<T extends ClientLike = ClientLike> {
  */
 export function buildTodaysPriority<T extends ClientLike>(
   clients: T[],
-  now: Date = new Date()
+  now: Date = nowET()
 ): TodayPriorityRow<T>[] {
   const today = localDateString(now);
   const rows: TodayPriorityRow<T>[] = [];
@@ -272,7 +287,7 @@ export function remainingWorkdays(now: Date, weekEndIso: string): number {
 }
 
 /** The current goal-tracking week, as of `now`. */
-export function currentWeekRange(now: Date = new Date()): WeekRange {
+export function currentWeekRange(now: Date = nowET()): WeekRange {
   return weekRangeFor(now, 0);
 }
 
@@ -280,7 +295,7 @@ export function currentWeekRange(now: Date = new Date()): WeekRange {
 export const TREND_WEEKS = 8;
 
 /** The last `count` goal-tracking weeks, oldest first, ending with the current (in-progress) week. */
-export function recentWeekRanges(count: number, now: Date = new Date()): WeekRange[] {
+export function recentWeekRanges(count: number, now: Date = nowET()): WeekRange[] {
   const ranges: WeekRange[] = [];
   for (let i = count - 1; i >= 0; i--) {
     ranges.push(weekRangeFor(now, i));
@@ -298,7 +313,7 @@ interface CallbackLike {
  * follow-up call being logged — these would otherwise silently vanish from "Today's Priority"
  * the moment the day rolls over, so they need their own always-visible list.
  */
-export function findMissedCallbacks<T extends CallbackLike>(clients: T[], now: Date = new Date()): T[] {
+export function findMissedCallbacks<T extends CallbackLike>(clients: T[], now: Date = nowET()): T[] {
   const todayStart = `${localDateString(now)}T00:00`;
   return clients
     .filter((c) => c.status === "CALLBACK" && !!c.callbackScheduledAt && c.callbackScheduledAt < todayStart)
@@ -317,7 +332,7 @@ export const DORMANT_DAYS = 30;
  * never-called lead is still hot enough to deserve a proactive nudge on Today's Priority, since
  * book clients have no day-15 deadline to eventually force the issue.
  */
-export function isWithinNeverCalledWindow(intakeDate: string, now: Date = new Date()): boolean {
+export function isWithinNeverCalledWindow(intakeDate: string, now: Date = nowET()): boolean {
   const since = daysBetween(new Date(intakeDate), now);
   return since >= 0 && since <= NEVER_CALLED_WINDOW_DAYS;
 }
@@ -351,7 +366,7 @@ export interface BacklogEntry<T extends BacklogClient> {
  */
 export function buildWorkTheBookQueue<T extends BacklogClient>(
   clients: T[],
-  now: Date = new Date()
+  now: Date = nowET()
 ): BacklogEntry<T>[] {
   const dormant = clients
     .filter(
@@ -381,7 +396,7 @@ export function buildWorkTheBookQueue<T extends BacklogClient>(
  * left, but not yet zero — that's the separate "closes today" trigger). Catches leads that would
  * otherwise ride out the whole window untouched and only get flagged on the very last day.
  */
-export function isNearingExpiryUncalled(firstSaleDate: string, now: Date = new Date()): boolean {
+export function isNearingExpiryUncalled(firstSaleDate: string, now: Date = nowET()): boolean {
   if (isWindowExpired(firstSaleDate, now)) return false;
   const daysLeft = daysLeftInWindow(firstSaleDate, now);
   return daysLeft >= 1 && daysLeft <= NEVER_CALLED_WINDOW_DAYS;

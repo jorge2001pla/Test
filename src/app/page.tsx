@@ -28,6 +28,7 @@ import {
   findMissedCallbacks,
   isNearingExpiryUncalled,
   localDateString,
+  nowET,
   recentWeekRanges,
   remainingWorkdays,
   TREND_WEEKS,
@@ -97,7 +98,7 @@ export default async function DashboardPage({
   searchParams: Promise<{ month?: string }>;
 }) {
   const { month: monthParamValue } = await searchParams;
-  const now = new Date();
+  const now = nowET();
 
   let year = now.getFullYear();
   let month = now.getMonth();
@@ -406,7 +407,7 @@ export default async function DashboardPage({
         <div>
           <h1 className="font-display text-2xl font-semibold text-foreground">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Today: {formatDate(new Date().toISOString())}
+            Today: {formatDate(localDateString(now))}
           </p>
         </div>
         <Link
