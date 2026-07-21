@@ -9,6 +9,8 @@ export interface CalendarCallback {
   id: string;
   name: string;
   time: string;
+  /** Raw local datetime (sortable) — the formatted `time` is for display only. */
+  sortKey: string;
   href: string;
 }
 
@@ -92,27 +94,22 @@ export default function MonthCalendar({
     return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
 
-  const agendaEntries = selectedDay
-    ? [
-        {
-          label: new Date(`${selectedDay}T00:00`).toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "short",
-            day: "numeric",
-          }),
-          callbacks: callbacksByDay[selectedDay] ?? [],
-        },
-      ]
-    : Object.keys(callbacksByDay)
-        .sort()
-        .map((key) => ({
-          label: new Date(`${key}T00:00`).toLocaleDateString("en-US", {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-          }),
-          callbacks: callbacksByDay[key],
-        }));
+  // Default view shows only today's schedule (a whole month fills up too fast to scan) —
+  // clicking any dotted day swaps the panel to that day's callbacks.
+  const agendaDay = selectedDay ?? todayDate;
+  const agendaEntries = [
+    {
+      label:
+        agendaDay === todayDate
+          ? "Today"
+          : new Date(`${agendaDay}T00:00`).toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+            }),
+      callbacks: callbacksByDay[agendaDay] ?? [],
+    },
+  ];
 
   return (
     <div className="grid grid-cols-1 gap-6 rounded-lg border border-border bg-card p-8 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -177,8 +174,12 @@ export default function MonthCalendar({
       </div>
 
       <AgendaList
-        title={selectedDay ? "Selected Day" : "This Month's Callbacks"}
-        emptyText={selectedDay ? "No callbacks scheduled." : "No callbacks scheduled this month."}
+        title={selectedDay ? "Selected Day" : "Today's Callbacks"}
+        emptyText={
+          selectedDay
+            ? "No callbacks scheduled."
+            : "No callbacks today — tap a dotted day to see its schedule."
+        }
         entries={agendaEntries}
       />
     </div>

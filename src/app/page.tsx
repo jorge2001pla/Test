@@ -374,6 +374,7 @@ export default async function DashboardPage({
       id: cb.clientId,
       name: cb.clientName,
       time: formatTimeOnly(cb.scheduledAt),
+      sortKey: cb.scheduledAt,
       href: `/clients/${cb.clientId}`,
     });
   }
@@ -383,8 +384,13 @@ export default async function DashboardPage({
       id: cb.bookClientId,
       name: cb.clientName,
       time: formatTimeOnly(cb.scheduledAt),
+      sortKey: cb.scheduledAt,
       href: `/book/${cb.bookClientId}`,
     });
+  }
+  // 15-day and book callbacks are merged per day above — order each day's list by time.
+  for (const day of Object.keys(callbacksByDay)) {
+    callbacksByDay[day].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   }
 
   const prevMonthDate = new Date(year, month - 1, 1);
