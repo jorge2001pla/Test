@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
+import { logoutAction } from "@/app/auth-actions";
 
 export default function SettingsMenu() {
   const [open, setOpen] = useState(false);
@@ -57,6 +58,14 @@ export default function SettingsMenu() {
             <span className="text-sm text-foreground">Theme</span>
             <ThemeToggle />
           </div>
+          <form action={logoutAction} className="border-t border-border">
+            <button
+              type="submit"
+              className="block w-full px-4 py-2 text-left text-sm text-muted-foreground hover:bg-gold/10 hover:text-gold"
+            >
+              Log Out
+            </button>
+          </form>
         </div>
       )}
     </div>
