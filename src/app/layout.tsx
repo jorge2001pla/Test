@@ -7,6 +7,7 @@ import ThemeScript from "@/components/ThemeScript";
 import SpotPriceTicker from "@/components/SpotPriceTicker";
 import SalesQuoteBanner from "@/components/SalesQuoteBanner";
 import SettingsMenu from "@/components/SettingsMenu";
+import GlobalSearch from "@/components/GlobalSearch";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -82,6 +83,7 @@ export default function RootLayout({
             </div>
 
             <div className="ml-auto flex items-center gap-4">
+              <GlobalSearch />
               <SpotPriceTicker />
               <SettingsMenu />
             </div>
