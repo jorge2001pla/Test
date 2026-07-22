@@ -416,12 +416,20 @@ export default async function DashboardPage({
             Today: {formatDate(localDateString(now))}
           </p>
         </div>
-        <Link
-          href="/book/new"
-          className="rounded bg-gold px-4 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
-        >
-          + Log New Account
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/clients/new"
+            className="rounded bg-gold px-4 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
+          >
+            + New Account (50% List)
+          </Link>
+          <Link
+            href="/book/new"
+            className="rounded border border-gold px-4 py-2 text-sm font-medium text-gold transition-colors hover:bg-gold/10"
+          >
+            + Add Client to Book
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-lg border border-border bg-card p-5">

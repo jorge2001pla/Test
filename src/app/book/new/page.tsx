@@ -6,14 +6,7 @@ import NameFieldsWithDuplicateCheck from "@/components/NameFieldsWithDuplicateCh
 const inputClass =
   "w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none";
 
-export default async function NewBookClientPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ existing?: string }>;
-}) {
-  const { existing } = await searchParams;
-  const isExisting = existing === "1";
-
+export default async function NewBookClientPage() {
   const existingClients = await listBookClients();
   const existingNames = existingClients
     .map((c) => `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim().toLowerCase())
@@ -24,14 +17,15 @@ export default async function NewBookClientPage({
       <Link href="/book" className="text-sm text-muted-foreground hover:text-gold">
         ← Back to Clients
       </Link>
-      <h1 className="mt-2 font-display text-2xl font-semibold text-foreground">
-        {isExisting ? "Add Client" : "Log New Account"}
-      </h1>
+      <h1 className="mt-2 font-display text-2xl font-semibold text-foreground">Add Client to Book</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        {isExisting
-          ? "For an existing or reactivated client who should go straight into your book — no 15-day window to track."
-          : "For accounts you opened yourself (e.g. the Morgan promo) that go straight into your book — no 15-day window to track."}{" "}
-        Either way, they count toward this week&apos;s goal.
+        Straight into your book with no 15-day window — for existing or reactivated clients, or a
+        direct sale you closed yourself. Counts toward this week&apos;s goal. For an account an
+        opener just opened, use{" "}
+        <Link href="/clients/new" className="text-gold hover:underline">
+          New Account (50% List)
+        </Link>{" "}
+        instead.
       </p>
 
       <form action={createBookClientAction} className="mt-6 space-y-4">

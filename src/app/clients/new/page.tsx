@@ -14,10 +14,13 @@ export default function NewClientPage() {
       <Link href="/follow-up" className="text-sm text-muted-foreground hover:text-gold">
         ← Back to 50% Follow-Up
       </Link>
-      <h1 className="mt-2 font-display text-2xl font-semibold text-foreground">Add New Client</h1>
+      <h1 className="mt-2 font-display text-2xl font-semibold text-foreground">
+        New Account (50% List)
+      </h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        First sale date starts the 15-day, 50%-commission countdown. Defaults to today, but you
-        can backdate it when importing from the old Master List.
+        For accounts an opener just opened — the first sale date starts the 15-day, 50%-commission
+        countdown. If you close them during the window, use &quot;Add to my Client Book&quot; on
+        their page to bring them into the book.
       </p>
 
       <form action={createClientAction} className="mt-6 space-y-4">
