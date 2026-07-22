@@ -47,6 +47,7 @@ import WeeklyTrendChart from "@/components/WeeklyTrendChart";
 import PhoneLink from "@/components/PhoneLink";
 import TrackingLink from "@/components/TrackingLink";
 import PriorityRowItem, { type PriorityRowData } from "@/components/PriorityRowItem";
+import OverdueRowItem from "@/components/OverdueRowItem";
 import { createReminderAction, createNoteAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +91,7 @@ interface OverdueRow {
   href: string;
   status: ClientStatus;
   reasonLabel: string;
+  kind: "client" | "book";
 }
 
 export default async function DashboardPage({
@@ -165,6 +167,7 @@ export default async function DashboardPage({
       href: `/clients/${c.id}`,
       status: c.status,
       reasonLabel: `Missed callback — was ${formatCallbackTime(c.callbackScheduledAt)}`,
+      kind: "client" as const,
     })),
     ...missedBookCallbacks.map((c) => ({
       id: c.id,
@@ -173,6 +176,7 @@ export default async function DashboardPage({
       href: `/book/${c.id}`,
       status: c.status,
       reasonLabel: `Missed callback — was ${formatCallbackTime(c.callbackScheduledAt)}`,
+      kind: "book" as const,
     })),
   ];
 
@@ -564,18 +568,7 @@ export default async function DashboardPage({
           </p>
           <ul className="mt-3 divide-y divide-border">
             {overdueRows.map((row) => (
-              <li key={`${row.href}-${row.reasonLabel}`} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <Link
-                  href={row.href}
-                  className="font-medium text-foreground hover:text-gold hover:underline"
-                >
-                  {row.name}
-                </Link>
-                <span className="text-muted-foreground">
-                  <PhoneLink phone={row.phone} />
-                </span>
-                <span className="text-red-600 dark:text-red-400">{row.reasonLabel}</span>
-              </li>
+              <OverdueRowItem key={`${row.href}-${row.reasonLabel}`} row={row} />
             ))}
             {overdueReminders.map((r) => (
               <ReminderItem key={r.id} id={r.id} text={r.text} dueAt={r.dueAt} overdue />

@@ -196,6 +196,16 @@ export async function listScheduledCallbacks(
   }));
 }
 
+/** Clears a stale callback without logging a call — resets to No Dispo so the client leaves
+ * the Overdue list but stays in the normal rotation. */
+export async function clearCallback(clientId: string): Promise<void> {
+  await ready();
+  await db.execute({
+    sql: `UPDATE clients SET status = 'NO_DISPO', callback_scheduled_at = NULL, updated_at = datetime('now') WHERE id = ?`,
+    args: [clientId],
+  });
+}
+
 export async function updateClientNotes(clientId: string, notes: string): Promise<void> {
   await ready();
   await db.execute({

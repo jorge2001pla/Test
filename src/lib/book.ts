@@ -190,6 +190,16 @@ export async function countBookClientsCreatedInRange(startIso: string, endIso: s
   return Number((res.rows[0] as unknown as { cnt: number | string }).cnt);
 }
 
+/** Clears a stale callback without logging a call — resets to No Dispo so the client leaves
+ * the Overdue list but stays in the normal rotation. */
+export async function clearBookCallback(id: string): Promise<void> {
+  await ready();
+  await db.execute({
+    sql: `UPDATE book_clients SET status = 'NO_DISPO', callback_scheduled_at = NULL, updated_at = datetime('now') WHERE id = ?`,
+    args: [id],
+  });
+}
+
 export async function deleteBookClient(id: string): Promise<void> {
   await ready();
   await db.execute({ sql: "DELETE FROM book_clients WHERE id = ?", args: [id] });

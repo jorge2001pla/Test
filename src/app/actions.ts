@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   addCallLogEntry,
+  clearCallback,
   createClient,
   getClient,
   linkClientToBook,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/clients";
 import {
   addBookCallLogEntry,
+  clearBookCallback,
   createBookClient,
   deleteBookClient,
   getBookClient,
@@ -388,6 +390,17 @@ export async function reactivatePromotionAction(promotionId: string): Promise<vo
   await reactivatePromotion(promotionId);
   revalidatePath("/");
   revalidatePath("/campaigns");
+}
+
+/** Dismisses a missed callback from the Overdue list without logging a call — resets the client
+ * to No Dispo so they rejoin the normal rotation instead of sitting flagged forever. */
+export async function dismissMissedCallbackAction(id: string, kind: "client" | "book"): Promise<void> {
+  if (kind === "client") {
+    await clearCallback(id);
+  } else {
+    await clearBookCallback(id);
+  }
+  revalidatePath("/");
 }
 
 export interface ValueImportRow {
