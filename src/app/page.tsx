@@ -492,36 +492,6 @@ export default async function DashboardPage({
         )}
       </div>
 
-      {(overdueRows.length > 0 || overdueReminders.length > 0) && (
-        <div className="rounded-lg border border-red-600/40 bg-card p-5 dark:border-red-400/40">
-          <h2 className="font-display text-lg font-semibold text-red-600 dark:text-red-400">
-            Overdue
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Callbacks that passed without a call, and reminders you set that came due.
-          </p>
-          <ul className="mt-3 divide-y divide-border">
-            {overdueRows.map((row) => (
-              <li key={`${row.href}-${row.reasonLabel}`} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <Link
-                  href={row.href}
-                  className="font-medium text-foreground hover:text-gold hover:underline"
-                >
-                  {row.name}
-                </Link>
-                <span className="text-muted-foreground">
-                  <PhoneLink phone={row.phone} />
-                </span>
-                <span className="text-red-600 dark:text-red-400">{row.reasonLabel}</span>
-              </li>
-            ))}
-            {overdueReminders.map((r) => (
-              <ReminderItem key={r.id} id={r.id} text={r.text} dueAt={r.dueAt} overdue />
-            ))}
-          </ul>
-        </div>
-      )}
-
       <div>
         <h2 className="font-display text-lg font-semibold text-foreground">Today&apos;s Priority</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -583,6 +553,36 @@ export default async function DashboardPage({
           )}
         </div>
       </div>
+
+      {(overdueRows.length > 0 || overdueReminders.length > 0) && (
+        <div className="rounded-lg border border-red-600/40 bg-card p-5 dark:border-red-400/40">
+          <h2 className="font-display text-lg font-semibold text-red-600 dark:text-red-400">
+            Overdue
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Callbacks that passed without a call, and reminders you set that came due.
+          </p>
+          <ul className="mt-3 divide-y divide-border">
+            {overdueRows.map((row) => (
+              <li key={`${row.href}-${row.reasonLabel}`} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <Link
+                  href={row.href}
+                  className="font-medium text-foreground hover:text-gold hover:underline"
+                >
+                  {row.name}
+                </Link>
+                <span className="text-muted-foreground">
+                  <PhoneLink phone={row.phone} />
+                </span>
+                <span className="text-red-600 dark:text-red-400">{row.reasonLabel}</span>
+              </li>
+            ))}
+            {overdueReminders.map((r) => (
+              <ReminderItem key={r.id} id={r.id} text={r.text} dueAt={r.dueAt} overdue />
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div>
         <MonthCalendar
