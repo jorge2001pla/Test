@@ -39,6 +39,13 @@ export default function NewClientPage() {
         </div>
 
         <div>
+          <label className="mb-1 block text-sm text-muted-foreground" htmlFor="email">
+            Email
+          </label>
+          <input id="email" name="email" type="email" className={inputClass} />
+        </div>
+
+        <div>
           <label className="mb-1 block text-sm text-muted-foreground" htmlFor="opener">
             Opener
           </label>

@@ -53,6 +53,7 @@ function parseStatus(
 export async function createClientAction(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
   const opener = String(formData.get("opener") ?? "").trim();
   const firstSaleDate = String(formData.get("firstSaleDate") ?? "");
   const firstSaleAmountRaw = String(formData.get("firstSaleAmount") ?? "");
@@ -66,6 +67,7 @@ export async function createClientAction(formData: FormData): Promise<void> {
   const input: NewClientInput = {
     name,
     phone,
+    email: email || null,
     opener: opener || null,
     firstSaleDate,
     firstSaleAmount: firstSaleAmountRaw ? Number(firstSaleAmountRaw) : null,
@@ -194,7 +196,7 @@ export async function addClientToBookAction(clientId: string): Promise<void> {
     firstName: firstName || null,
     lastName: rest.join(" ") || null,
     phone: client.phone,
-    email: null,
+    email: client.email,
   });
   await linkClientToBook(clientId, bookClient.id);
   revalidatePath(`/clients/${clientId}`);

@@ -39,6 +39,7 @@ export default async function ClientDetailPage({
             <p className="text-sm text-muted-foreground">
               <PhoneLink phone={client.phone} />
             </p>
+            {client.email && <p className="text-sm text-muted-foreground">{client.email}</p>}
           </div>
           <StatusBadge status={client.status} />
         </div>

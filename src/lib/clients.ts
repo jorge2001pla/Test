@@ -7,6 +7,7 @@ interface ClientRowDb {
   id: string;
   name: string;
   phone: string;
+  email: string | null;
   opener: string | null;
   first_sale_date: string;
   first_sale_amount: number | null;
@@ -31,6 +32,7 @@ function mapClient(row: ClientRowDb): Client {
     id: row.id,
     name: row.name,
     phone: row.phone,
+    email: row.email,
     opener: row.opener,
     firstSaleDate: row.first_sale_date,
     firstSaleAmount: row.first_sale_amount,
@@ -106,6 +108,7 @@ export async function getClient(id: string): Promise<ClientWithCallLog | undefin
 export interface NewClientInput {
   name: string;
   phone: string;
+  email?: string | null;
   opener?: string | null;
   firstSaleDate: string;
   firstSaleAmount?: number | null;
@@ -117,12 +120,13 @@ export async function createClient(input: NewClientInput): Promise<Client> {
   await ready();
   const id = randomUUID();
   await db.execute({
-    sql: `INSERT INTO clients (id, name, phone, opener, first_sale_date, first_sale_amount, status, notes)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO clients (id, name, phone, email, opener, first_sale_date, first_sale_amount, status, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       input.name,
       input.phone,
+      input.email ?? null,
       input.opener ?? null,
       input.firstSaleDate,
       input.firstSaleAmount ?? null,

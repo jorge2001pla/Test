@@ -131,6 +131,7 @@ async function ensureSchema(): Promise<void> {
   // Campaign type — existing promos default to the regular PROMOTION channel; the second channel
   // is COIN_OF_WEEK. One campaign can be active per kind, tracked on its own tab.
   await addColumnIfMissing("promotions", "kind", "TEXT NOT NULL DEFAULT 'PROMOTION'");
+  await addColumnIfMissing("clients", "email", "TEXT");
 
   // shipments.tracking_number became tracking_link (holds a pasted USPS/FedEx tracking URL now,
   // not just a raw number) — rename the column on any table created before this change.

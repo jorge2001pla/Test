@@ -20,6 +20,7 @@ export interface Client {
   id: string;
   name: string;
   phone: string;
+  email: string | null;
   opener: string | null;
   firstSaleDate: string;
   firstSaleAmount: number | null;
