@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import db, { ready } from "./db";
-import { localDateTimeString } from "./business-logic";
+import { localDateString, localDateTimeString, nowET } from "./business-logic";
+import { formatWholeCurrency } from "./format";
 import type { ClientStatus } from "./types";
+
+/** Days after delivery until the auto-created check-in and upsell follow-up calls come due. */
+export const POST_DELIVERY_CHECKIN_DAYS = 1;
+export const POST_DELIVERY_UPSELL_DAYS = 5;
 
 export type Carrier = "USPS" | "FedEx" | "Other";
 
@@ -172,11 +177,71 @@ export async function setShippedCallDone(id: string, done: boolean): Promise<voi
 
 export async function markDelivered(id: string): Promise<void> {
   await ready();
-  const now = localDateTimeString();
-  await db.execute({
-    sql: `UPDATE shipments SET delivered_at = ?, updated_at = ? WHERE id = ?`,
-    args: [now, now, id],
+  const nowDate = nowET();
+  const now = localDateTimeString(nowDate);
+
+  const res = await db.execute({
+    sql: `SELECT s.book_client_id, s.sale_amount, s.delivered_at, b.first_name, b.last_name
+          FROM shipments s
+          JOIN book_clients b ON b.id = s.book_client_id
+          WHERE s.id = ?`,
+    args: [id],
   });
+  const row = res.rows[0] as unknown as
+    | {
+        book_client_id: string;
+        sale_amount: number | null;
+        delivered_at: string | null;
+        first_name: string | null;
+        last_name: string | null;
+      }
+    | undefined;
+  if (!row) return;
+
+  const statements: { sql: string; args: (string | null)[] }[] = [
+    {
+      sql: `UPDATE shipments SET delivered_at = ?, updated_at = ? WHERE id = ?`,
+      args: [now, now, id],
+    },
+  ];
+
+  // Delivery kicks off the follow-up chain: a check-in call shortly after the coin lands, then
+  // an upsell call while it's still exciting. Only on the first delivery mark — re-marking a
+  // shipment delivered shouldn't spawn duplicate follow-ups.
+  if (!row.delivered_at) {
+    const name = [row.first_name, row.last_name].filter(Boolean).join(" ") || "Unnamed";
+    const orderLabel = row.sale_amount
+      ? `${formatWholeCurrency(row.sale_amount)} order delivered ${nowDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+      : `order delivered ${nowDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    const checkinDue = new Date(nowDate);
+    checkinDue.setDate(checkinDue.getDate() + POST_DELIVERY_CHECKIN_DAYS);
+    const upsellDue = new Date(nowDate);
+    upsellDue.setDate(upsellDue.getDate() + POST_DELIVERY_UPSELL_DAYS);
+    statements.push(
+      {
+        sql: `INSERT INTO reminders (id, text, due_at, book_client_id, created_at) VALUES (?, ?, ?, ?, ?)`,
+        args: [
+          randomUUID(),
+          `Post-delivery check-in — ${name} (${orderLabel})`,
+          localDateString(checkinDue),
+          row.book_client_id,
+          now,
+        ],
+      },
+      {
+        sql: `INSERT INTO reminders (id, text, due_at, book_client_id, created_at) VALUES (?, ?, ?, ?, ?)`,
+        args: [
+          randomUUID(),
+          `Upsell opportunity — ${name} (${orderLabel})`,
+          localDateString(upsellDue),
+          row.book_client_id,
+          now,
+        ],
+      }
+    );
+  }
+
+  await db.batch(statements, "write");
 }
 
 export async function setDeliveredCallDone(id: string, done: boolean): Promise<void> {

@@ -7,7 +7,7 @@ import {
   getBookValueStats,
 } from "@/lib/book";
 import { listActiveShipments, listShipmentsNeedingCallToday } from "@/lib/shipments";
-import { listActiveReminders } from "@/lib/reminders";
+import { listActiveReminders, listDueClientFollowUps } from "@/lib/reminders";
 import { listNotes } from "@/lib/notes";
 import {
   listActivePromotions,
@@ -79,8 +79,9 @@ function CampaignCard({ promo, progress }: { promo: Promotion; progress: Promoti
 /** Row shape used while building the list — adds sort/grouping fields dropped before rendering. */
 interface BuildRow extends PriorityRowData {
   sortKey: string;
-  /** 0 = 50% expiring soon, 1 = callback today, 2 = shipment needs a call, 3 = no-answer today
-   * (circle back), 4 = active promo not yet called, 5 = backlog fill. */
+  /** 0 = 50% expiring soon, 1 = callback today, 2 = shipment needs a call, 3 = delivery
+   * follow-up due (check-in / upsell), 4 = no-answer today (circle back), 5 = active promo not
+   * yet called, 6 = backlog fill. */
   tier: number;
 }
 
@@ -188,7 +189,10 @@ export default async function DashboardPage({
 
   const reminders = await listActiveReminders();
   const notes = await listNotes();
-  const overdueReminders = reminders.filter((r) => r.dueAt && r.dueAt < today);
+  // Client-linked follow-ups (post-delivery check-in / upsell) live in the priority queue when
+  // due, so the Overdue safety net only needs the freestanding reminders.
+  const overdueReminders = reminders.filter((r) => r.dueAt && r.dueAt < today && !r.bookClientId);
+  const dueFollowUps = await listDueClientFollowUps(today);
 
   // Tier 0 — 50% expiring soon: window closes today, or (window-closing + callback both today).
   const expiringSoonRows: BuildRow[] = [
@@ -271,7 +275,29 @@ export default async function DashboardPage({
     };
   });
 
-  // Tier 3 — circle-backs: dispo'd Not Available today (no answer / left a VM). An attempt is
+  // Tier 3 — delivery follow-ups that came due: the auto-created post-delivery check-in and
+  // upsell calls. Logging any real call for the client marks them done; until then they stay.
+  const followUpRows: BuildRow[] = dueFollowUps.map((r) => {
+    // Reminder text is "Label — Name (order info)"; the row already shows the name, so the
+    // reason column keeps just the label and order info.
+    const dashAt = r.text.indexOf(" — ");
+    const label = dashAt > -1 ? r.text.slice(0, dashAt) : r.text;
+    const orderInfo = r.text.match(/\(([^)]*)\)\s*$/)?.[1];
+    return {
+      id: r.bookClientId as string,
+      name: r.clientName,
+      phone: r.clientPhone ?? "—",
+      href: `/book/${r.bookClientId}`,
+      status: r.clientStatus,
+      reasonLabel: orderInfo ? `${label} — ${orderInfo}` : label,
+      sortKey: r.dueAt ?? "",
+      tier: 3,
+      kind: "book" as const,
+      muted: false,
+    };
+  });
+
+  // Tier 4 — circle-backs: dispo'd Not Available today (no answer / left a VM). An attempt is
   // not a completed touch — they stay on today's list so Jorge retries before end of day.
   const retryRows: BuildRow[] = [
     ...clients
@@ -284,7 +310,7 @@ export default async function DashboardPage({
         status: c.status,
         reasonLabel: `No answer at ${formatTimeOnly(c.lastCallAt as string)} — circle back`,
         sortKey: c.lastCallAt as string,
-        tier: 3,
+        tier: 4,
         kind: "client" as const,
         muted: false,
       })),
@@ -298,21 +324,29 @@ export default async function DashboardPage({
         status: c.status,
         reasonLabel: `No answer at ${formatTimeOnly(c.lastContactAt as string)} — circle back`,
         sortKey: c.lastContactAt as string,
-        tier: 3,
+        tier: 4,
         kind: "book" as const,
         muted: false,
       })),
   ];
 
-  const preRetryIds = new Set([...expiringSoonRows, ...callbackTodayRows, ...shipmentRows].map((r) => r.id));
+  // Shipment rows are keyed by shipment id, so dedupe follow-ups against the shipment's
+  // underlying client too — one client, one row: the shipment call covers the touch.
+  const preFollowUpIds = new Set([
+    ...[...expiringSoonRows, ...callbackTodayRows, ...shipmentRows].map((r) => r.id),
+    ...shipmentRows.map((r) => r.shipmentAction!.bookClientId),
+  ]);
+  const dedupedFollowUps = followUpRows.filter((r) => !preFollowUpIds.has(r.id));
+  const preRetryIds = new Set([...preFollowUpIds, ...dedupedFollowUps.map((r) => r.id)]);
   const dueTodayRows: BuildRow[] = [
     ...expiringSoonRows,
     ...callbackTodayRows,
     ...shipmentRows,
+    ...dedupedFollowUps,
     ...retryRows.filter((r) => !preRetryIds.has(r.id)),
   ];
 
-  // Tier 4 — active promo push, not yet called, biggest clients first — only enough to round
+  // Tier 5 — active promo push, not yet called, biggest clients first — only enough to round
   // the list toward the daily target (a promo push shouldn't itself blow past the target).
   const dueTodayIds = new Set(dueTodayRows.map((r) => r.id));
   const promoFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length);
@@ -328,14 +362,14 @@ export default async function DashboardPage({
           status: c.status,
           reasonLabel: activePromotions.length > 1 ? "Campaign — call needed" : `Promo — ${newestCampaign.name}`,
           sortKey: "",
-          tier: 4,
+          tier: 5,
           kind: "book" as const,
           muted: false,
         }))
     : [];
   for (const r of promoRows) dueTodayIds.add(r.id);
 
-  // Tier 5 — backlog fill, only enough to round the list out to the daily target.
+  // Tier 6 — backlog fill, only enough to round the list out to the daily target.
   const backlogFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length - promoRows.length);
   const backlogRows: BuildRow[] = workQueue
     .filter((e) => !dueTodayIds.has(e.client.id))
@@ -351,7 +385,7 @@ export default async function DashboardPage({
           ? `Backlog — cold ${daysSince(e.client.lastContactAt as string, now)} days`
           : "Backlog — never contacted",
       sortKey: "",
-      tier: 5,
+      tier: 6,
       kind: "book" as const,
       muted: true,
     }));
@@ -500,8 +534,9 @@ export default async function DashboardPage({
         <h2 className="font-display text-lg font-semibold text-foreground">Today&apos;s Priority</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Your call list for the day, top to bottom — 50% clients expiring soon, then callbacks
-          scheduled for today, then shipments needing a call, filled out from your backlog so
-          there&apos;s always {DAILY_QUEUE_TARGET} to work.
+          scheduled for today, then shipments needing a call, then delivery follow-ups
+          (check-in and upsell), filled out from your backlog so there&apos;s always{" "}
+          {DAILY_QUEUE_TARGET} to work.
         </p>
         <div className="mt-4">
           {priorityRows.length === 0 ? (

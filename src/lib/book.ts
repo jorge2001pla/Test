@@ -269,6 +269,17 @@ export async function addBookCallLogEntry(
     );
   }
 
+  // A completed call satisfies any follow-up reminder that was due for this client (post-delivery
+  // check-in, upsell). Not Available is only an attempt — the follow-up stays open. Future-dated
+  // follow-ups are untouched so an early check-in call doesn't swallow the later upsell call.
+  if (resultingStatus !== "NOT_AVAILABLE") {
+    statements.push({
+      sql: `UPDATE reminders SET done = 1
+            WHERE book_client_id = ? AND done = 0 AND due_at IS NOT NULL AND due_at <= ?`,
+      args: [bookClientId, timestamp.slice(0, 10)],
+    });
+  }
+
   await db.batch(statements, "write");
 }
 
