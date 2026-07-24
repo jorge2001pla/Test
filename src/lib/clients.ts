@@ -141,23 +141,46 @@ export async function addCallLogEntry(
 ): Promise<void> {
   await ready();
   const id = randomUUID();
+  const timestamp = localDateTimeString();
   // A scheduled callback only makes sense while the dispo is actually Callback — any other
   // outcome clears it so stale appointments don't linger on the calendar or priority list.
   const scheduledAt = resultingStatus === "CALLBACK" ? callbackScheduledAt : null;
-  await db.batch(
-    [
+
+  const statements = [
+    {
+      sql: `INSERT INTO call_log_entries (id, client_id, timestamp, note_text, resulting_status)
+            VALUES (?, ?, ?, ?, ?)`,
+      args: [id, clientId, timestamp, noteText, resultingStatus] as (string | null)[],
+    },
+    {
+      sql: `UPDATE clients SET status = ?, callback_scheduled_at = ?, updated_at = datetime('now') WHERE id = ?`,
+      args: [resultingStatus, scheduledAt, clientId] as (string | null)[],
+    },
+  ];
+
+  // A 15-day client linked into the book is the same person — mirror the call and dispo onto
+  // the book record so both profiles show one continuous history.
+  const linkRes = await db.execute({
+    sql: "SELECT book_client_id FROM clients WHERE id = ?",
+    args: [clientId],
+  });
+  const bookClientId = (linkRes.rows[0] as unknown as { book_client_id: string | null } | undefined)
+    ?.book_client_id;
+  if (bookClientId) {
+    statements.push(
       {
-        sql: `INSERT INTO call_log_entries (id, client_id, timestamp, note_text, resulting_status)
+        sql: `INSERT INTO book_call_log_entries (id, book_client_id, timestamp, note_text, resulting_status)
               VALUES (?, ?, ?, ?, ?)`,
-        args: [id, clientId, localDateTimeString(), noteText, resultingStatus],
+        args: [randomUUID(), bookClientId, timestamp, noteText, resultingStatus],
       },
       {
-        sql: `UPDATE clients SET status = ?, callback_scheduled_at = ?, updated_at = datetime('now') WHERE id = ?`,
-        args: [resultingStatus, scheduledAt, clientId],
-      },
-    ],
-    "write"
-  );
+        sql: `UPDATE book_clients SET status = ?, callback_scheduled_at = ?, updated_at = datetime('now') WHERE id = ?`,
+        args: [resultingStatus, scheduledAt, bookClientId],
+      }
+    );
+  }
+
+  await db.batch(statements, "write");
 }
 
 export interface ScheduledCallback {

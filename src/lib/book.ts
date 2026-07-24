@@ -233,21 +233,43 @@ export async function addBookCallLogEntry(
 ): Promise<void> {
   await ready();
   const id = randomUUID();
+  const timestamp = localDateTimeString();
   const scheduledAt = resultingStatus === "CALLBACK" ? callbackScheduledAt : null;
-  await db.batch(
-    [
+
+  const statements = [
+    {
+      sql: `INSERT INTO book_call_log_entries (id, book_client_id, timestamp, note_text, resulting_status, promotion_id)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [id, bookClientId, timestamp, noteText, resultingStatus, promotionId] as (string | null)[],
+    },
+    {
+      sql: `UPDATE book_clients SET status = ?, callback_scheduled_at = ?, updated_at = datetime('now') WHERE id = ?`,
+      args: [resultingStatus, scheduledAt, bookClientId] as (string | null)[],
+    },
+  ];
+
+  // If this book client is also a linked 15-day client, mirror the call and dispo there too —
+  // one person, one continuous history on both profiles.
+  const linkRes = await db.execute({
+    sql: "SELECT id FROM clients WHERE book_client_id = ?",
+    args: [bookClientId],
+  });
+  const linkedClientId = (linkRes.rows[0] as unknown as { id: string } | undefined)?.id;
+  if (linkedClientId) {
+    statements.push(
       {
-        sql: `INSERT INTO book_call_log_entries (id, book_client_id, timestamp, note_text, resulting_status, promotion_id)
-              VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [id, bookClientId, localDateTimeString(), noteText, resultingStatus, promotionId],
+        sql: `INSERT INTO call_log_entries (id, client_id, timestamp, note_text, resulting_status)
+              VALUES (?, ?, ?, ?, ?)`,
+        args: [randomUUID(), linkedClientId, timestamp, noteText, resultingStatus],
       },
       {
-        sql: `UPDATE book_clients SET status = ?, callback_scheduled_at = ?, updated_at = datetime('now') WHERE id = ?`,
-        args: [resultingStatus, scheduledAt, bookClientId],
-      },
-    ],
-    "write"
-  );
+        sql: `UPDATE clients SET status = ?, callback_scheduled_at = ?, updated_at = datetime('now') WHERE id = ?`,
+        args: [resultingStatus, scheduledAt, linkedClientId],
+      }
+    );
+  }
+
+  await db.batch(statements, "write");
 }
 
 export interface ScheduledBookCallback {
