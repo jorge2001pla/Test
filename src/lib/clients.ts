@@ -242,6 +242,26 @@ export async function clearCallback(clientId: string): Promise<void> {
   });
 }
 
+export interface ClientDetailsUpdate {
+  name: string;
+  phone: string;
+  email: string | null;
+  opener: string | null;
+  firstSaleDate: string;
+  firstSaleAmount: number | null;
+}
+
+/** Corrects the identity/intake fields on a 15-day client — for typos and mis-entered details,
+ * not for dispo changes (those go through call logging). */
+export async function updateClientDetails(clientId: string, d: ClientDetailsUpdate): Promise<void> {
+  await ready();
+  await db.execute({
+    sql: `UPDATE clients SET name = ?, phone = ?, email = ?, opener = ?, first_sale_date = ?,
+          first_sale_amount = ?, updated_at = datetime('now') WHERE id = ?`,
+    args: [d.name, d.phone, d.email, d.opener, d.firstSaleDate, d.firstSaleAmount, clientId],
+  });
+}
+
 export async function updateClientNotes(clientId: string, notes: string): Promise<void> {
   await ready();
   await db.execute({

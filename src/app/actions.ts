@@ -9,6 +9,8 @@ import {
   getClient,
   linkClientToBook,
   unlinkClientFromBook,
+  updateClientDetails,
+  type ClientDetailsUpdate,
   type NewClientInput,
 } from "@/lib/clients";
 import {
@@ -19,6 +21,8 @@ import {
   getBookClient,
   listBookClients,
   setLifetimeValue,
+  updateBookClientDetails,
+  type BookClientDetailsUpdate,
 } from "@/lib/book";
 import {
   createShipment,
@@ -263,6 +267,44 @@ export async function setDeliveredCallDoneAction(
 ): Promise<void> {
   await setDeliveredCallDone(shipmentId, done);
   revalidatePath("/");
+  revalidatePath(`/book/${bookClientId}`);
+}
+
+export async function updateClientDetailsAction(
+  clientId: string,
+  d: ClientDetailsUpdate
+): Promise<void> {
+  if (!clientId || !d.name.trim() || !d.phone.trim() || !d.firstSaleDate) {
+    throw new Error("Name, phone, and first sale date are required.");
+  }
+  await updateClientDetails(clientId, {
+    ...d,
+    name: d.name.trim(),
+    phone: d.phone.trim(),
+    email: d.email?.trim() || null,
+    opener: d.opener?.trim() || null,
+  });
+  revalidatePath("/");
+  revalidatePath("/follow-up");
+  revalidatePath(`/clients/${clientId}`);
+}
+
+export async function updateBookClientDetailsAction(
+  bookClientId: string,
+  d: BookClientDetailsUpdate
+): Promise<void> {
+  if (!bookClientId || (!d.firstName?.trim() && !d.lastName?.trim())) {
+    throw new Error("A first or last name is required.");
+  }
+  await updateBookClientDetails(bookClientId, {
+    firstName: d.firstName?.trim() || null,
+    lastName: d.lastName?.trim() || null,
+    phone: d.phone?.trim() || null,
+    secondaryPhone: d.secondaryPhone?.trim() || null,
+    email: d.email?.trim() || null,
+  });
+  revalidatePath("/");
+  revalidatePath("/book");
   revalidatePath(`/book/${bookClientId}`);
 }
 

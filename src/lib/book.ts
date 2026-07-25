@@ -200,6 +200,28 @@ export async function clearBookCallback(id: string): Promise<void> {
   });
 }
 
+export interface BookClientDetailsUpdate {
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  secondaryPhone: string | null;
+  email: string | null;
+}
+
+/** Corrects the identity fields on a book client — for typos and mis-entered details, not for
+ * dispo or value changes (those have their own flows). */
+export async function updateBookClientDetails(
+  id: string,
+  d: BookClientDetailsUpdate
+): Promise<void> {
+  await ready();
+  await db.execute({
+    sql: `UPDATE book_clients SET first_name = ?, last_name = ?, phone = ?, secondary_phone = ?,
+          email = ?, updated_at = datetime('now') WHERE id = ?`,
+    args: [d.firstName, d.lastName, d.phone, d.secondaryPhone, d.email, id],
+  });
+}
+
 export async function deleteBookClient(id: string): Promise<void> {
   await ready();
   await db.execute({ sql: "DELETE FROM book_clients WHERE id = ?", args: [id] });

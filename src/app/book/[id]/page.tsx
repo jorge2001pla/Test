@@ -10,6 +10,7 @@ import ShipmentActions from "@/components/ShipmentActions";
 import PhoneLink from "@/components/PhoneLink";
 import TrackingLink from "@/components/TrackingLink";
 import LifetimeValueEditor from "@/components/LifetimeValueEditor";
+import EditClientDetails from "@/components/EditClientDetails";
 import { addBookCallLogAction, createShipmentAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,20 @@ export default async function BookClientDetailPage({
             </div>
           </div>
           <StatusBadge status={client.status} />
+        </div>
+
+        <div className="mt-3">
+          <EditClientDetails
+            id={client.id}
+            kind="book"
+            initial={{
+              firstName: client.firstName ?? "",
+              lastName: client.lastName ?? "",
+              phone: client.phone ?? "",
+              secondaryPhone: client.secondaryPhone ?? "",
+              email: client.email ?? "",
+            }}
+          />
         </div>
 
         {fallbackPitch && (

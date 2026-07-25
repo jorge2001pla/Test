@@ -12,6 +12,7 @@ import StatusBadge from "@/components/StatusBadge";
 import AddToBookToggle from "@/components/AddToBookToggle";
 import CallbackScheduleFields from "@/components/CallbackScheduleFields";
 import PhoneLink from "@/components/PhoneLink";
+import EditClientDetails from "@/components/EditClientDetails";
 import { addCallLogAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,21 @@ export default async function ClientDetailPage({
             {client.email && <p className="text-sm text-muted-foreground">{client.email}</p>}
           </div>
           <StatusBadge status={client.status} />
+        </div>
+
+        <div className="mt-3">
+          <EditClientDetails
+            id={client.id}
+            kind="client"
+            initial={{
+              name: client.name,
+              phone: client.phone,
+              email: client.email ?? "",
+              opener: client.opener ?? "",
+              firstSaleDate: client.firstSaleDate,
+              firstSaleAmount: client.firstSaleAmount?.toString() ?? "",
+            }}
+          />
         </div>
 
         {fallbackPitch && (
