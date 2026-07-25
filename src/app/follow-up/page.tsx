@@ -92,12 +92,20 @@ export default async function FollowUpPage() {
               whose window closes today come first — that&apos;s what to maximize right now.
             </p>
           </div>
-          <Link
-            href="/clients/new"
-            className="shrink-0 rounded bg-gold px-4 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
-          >
-            + Add Client
-          </Link>
+          <div className="flex shrink-0 flex-wrap gap-3">
+            <Link
+              href="/clients/new"
+              className="rounded bg-gold px-4 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
+            >
+              + New Account (50% List)
+            </Link>
+            <Link
+              href="/book/new"
+              className="rounded border border-gold px-4 py-2 text-sm font-medium text-gold transition-colors hover:bg-gold/10"
+            >
+              + Add Client to Book
+            </Link>
+          </div>
         </div>
         <div className="mt-4">
           <FollowUpTable rows={sections.priority} emptyText="Nothing urgent right now." />
