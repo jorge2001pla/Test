@@ -9,7 +9,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 The Premier Rare Coins **command center** — a CRM Jorge Pla (coin salesman, works it daily from two computers) uses to run his book of clients. It replaced an Excel system. Jorge uses the **live app in a browser**; he does not run code himself.
 
 - **Live URL: https://prc-app-one.vercel.app** — Vercel project `jpprc/prc-app`, GitHub `jorge2001pla/Test`, branch `main`.
-- **Deploy**: commit, `git push origin main`, then `npx vercel --prod --yes` (GitHub auto-deploy has been unreliable — always deploy via CLI and verify on the live URL).
+- **Coworker copy: https://prc-app-mtm.vercel.app** — Vercel project `jpprc/prc-app-mtm`, same code, its OWN Turso DB (provisioned via Vercel's Turso marketplace integration) and own login. Total data isolation from Jorge's copy by design.
+- **Deploy**: commit, `git push origin main`, then `npx vercel --prod --yes` (GitHub auto-deploy has been unreliable — always deploy via CLI and verify on the live URL). **Deploy to BOTH projects**: after deploying `prc-app`, swap `.vercel/project.json` to `prc-app-mtm` (`npx vercel link --yes --project prc-app-mtm`), deploy again, then link back to `prc-app` and restore `.env.local` with `npx vercel env pull .env.local --environment development` (linking/deploying the mtm project overwrites it with mtm's credentials).
 - **Stack**: Next.js App Router, Tailwind v4 (CSS-first config in `globals.css`), Turso (libSQL) via `@libsql/client`. **This is production data — one shared live DB, no staging.** Credentials live in gitignored `.env.local` (`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`).
 - **Dev server**: `npm run dev` on port 3000 (`.claude/launch.json` name: "dev").
 
