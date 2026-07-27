@@ -29,9 +29,7 @@ import {
   isNearingExpiryUncalled,
   localDateString,
   nowET,
-  recentWeekRanges,
   remainingWorkdays,
-  TREND_WEEKS,
   VALUE_TIER_THRESHOLDS,
   WEEKLY_GOAL,
   WHALE_GOAL_COUNT,
@@ -146,17 +144,35 @@ export default async function DashboardPage({
   );
 
   const weekRange = currentWeekRange(now);
-  const trendRanges = recentWeekRanges(TREND_WEEKS, now);
-  const trendCounts = await Promise.all(
-    trendRanges.map((r) => countBookClientsCreatedInRange(r.start, r.end))
+  const weeklyBookCount = await countBookClientsCreatedInRange(weekRange.start, weekRange.end);
+
+  // Daily trend for now — the book is young, so weekly bars hid the day-to-day movement.
+  // Once there's more history, switch back to recentWeekRanges(TREND_WEEKS) weekly bars.
+  const TREND_DAYS = 14;
+  const dayRanges = Array.from({ length: TREND_DAYS }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (TREND_DAYS - 1 - i));
+    const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    return {
+      start: `${localDateString(d)}T00:00:00`,
+      end: `${localDateString(next)}T00:00:00`,
+      label:
+        i === TREND_DAYS - 1
+          ? "Today"
+          : d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      range: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      isCurrent: i === TREND_DAYS - 1,
+    };
+  });
+  const dayCounts = await Promise.all(
+    dayRanges.map((r) => countBookClientsCreatedInRange(r.start, r.end))
   );
-  const weeklyBookCount = trendCounts[trendCounts.length - 1];
-  const trendWeeks = trendRanges.map((r, i) => ({
-    label: i === trendRanges.length - 1 ? "This week" : r.label.split(" – ")[0],
-    range: r.label,
-    count: trendCounts[i],
-    isCurrent: i === trendRanges.length - 1,
+  const trendPoints = dayRanges.map((r, i) => ({
+    label: r.label,
+    range: r.range,
+    count: dayCounts[i],
+    isCurrent: r.isCurrent,
   }));
+  const dailyPace = Math.ceil(WEEKLY_GOAL / 5);
 
   const missedClientCallbacks = findMissedCallbacks(clients, now);
   const missedBookCallbacks = findMissedCallbacks(bookClients, now);
@@ -489,7 +505,12 @@ export default async function DashboardPage({
           </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">{paceLabel}</p>
-        <WeeklyTrendChart weeks={trendWeeks} goal={WEEKLY_GOAL} />
+        <WeeklyTrendChart
+          points={trendPoints}
+          goal={dailyPace}
+          goalLabel={`Daily new-client trend, pace ${dailyPace}/day`}
+          caption={`Dashed line = daily pace (${dailyPace}/day hits the weekly ${WEEKLY_GOAL} across Mon–Fri). Last ${14} days, today highlighted.`}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
