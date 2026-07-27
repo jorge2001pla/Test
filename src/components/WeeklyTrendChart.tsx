@@ -1,5 +1,7 @@
 export interface WeekPoint {
   label: string;
+  /** Full Thu–Wed range (e.g. "Jul 23 – Jul 29") shown as a hover tooltip. */
+  range: string;
   count: number;
   isCurrent: boolean;
 }
@@ -40,6 +42,7 @@ export default function WeeklyTrendChart({ weeks, goal }: { weeks: WeekPoint[]; 
           const y = TOP_PADDING + plotHeight - barHeight;
           return (
             <g key={i}>
+              <title>{`Week of ${w.range}: ${w.count} new client${w.count === 1 ? "" : "s"}`}</title>
               <rect
                 x={x}
                 y={y}
@@ -63,7 +66,7 @@ export default function WeeklyTrendChart({ weeks, goal }: { weeks: WeekPoint[]; 
                 y={TOP_PADDING + plotHeight + 16}
                 textAnchor="middle"
                 fontSize={9}
-                className="fill-muted-foreground"
+                className={w.isCurrent ? "fill-gold font-medium" : "fill-muted-foreground"}
               >
                 {w.label}
               </text>
@@ -72,7 +75,8 @@ export default function WeeklyTrendChart({ weeks, goal }: { weeks: WeekPoint[]; 
         })}
       </svg>
       <p className="mt-1 text-xs text-muted-foreground">
-        Dashed line = weekly goal ({goal}). This week is still in progress.
+        Dashed line = weekly goal ({goal}). Each bar is a Thu–Wed week, labeled by its Thursday —
+        the last bar is the current week, still in progress.
       </p>
     </div>
   );

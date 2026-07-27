@@ -152,7 +152,8 @@ export default async function DashboardPage({
   );
   const weeklyBookCount = trendCounts[trendCounts.length - 1];
   const trendWeeks = trendRanges.map((r, i) => ({
-    label: r.label.split(" – ")[0],
+    label: i === trendRanges.length - 1 ? "This week" : r.label.split(" – ")[0],
+    range: r.label,
     count: trendCounts[i],
     isCurrent: i === trendRanges.length - 1,
   }));
