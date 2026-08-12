@@ -54,6 +54,12 @@ export default function SettingsMenu() {
           >
             Export Book (CSV)
           </a>
+          <a
+            href="/api/export-followup"
+            className="block px-4 py-2 text-sm text-foreground hover:bg-gold/10 hover:text-gold"
+          >
+            Export 50% List (CSV)
+          </a>
           <div className="mt-1 flex items-center justify-between border-t border-border px-4 py-2">
             <span className="text-sm text-foreground">Theme</span>
             <ThemeToggle />
