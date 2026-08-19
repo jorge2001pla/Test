@@ -13,6 +13,7 @@ import AddToBookToggle from "@/components/AddToBookToggle";
 import CallbackScheduleFields from "@/components/CallbackScheduleFields";
 import PhoneLink from "@/components/PhoneLink";
 import EditClientDetails from "@/components/EditClientDetails";
+import ClientProfileExtras from "@/components/ClientProfileExtras";
 import { addCallLogAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,14 @@ export default async function ClientDetailPage({
       <div className="rounded-lg border border-border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="font-display text-xl font-semibold text-foreground">{client.name}</h1>
+            <h1 className="font-display text-xl font-semibold text-foreground">
+              {client.name}
+              {client.qualification === "QUALIFIED" && (
+                <span className="ml-2 align-middle rounded bg-gold/15 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-gold dark:text-gold-bright">
+                  Qualified
+                </span>
+              )}
+            </h1>
             <p className="text-sm text-muted-foreground">
               <PhoneLink phone={client.phone} />
             </p>
@@ -111,6 +119,13 @@ export default async function ClientDetailPage({
           <AddToBookToggle clientId={client.id} initiallyInBook={!!client.bookClientId} />
         </div>
       </div>
+
+      <ClientProfileExtras
+        clientId={client.id}
+        initialQualification={client.qualification}
+        initialInterests={client.productInterests}
+        initialEmails={client.onboardingEmails}
+      />
 
       <div className="rounded-lg border border-border bg-card p-5">
         <h2 className="font-display text-lg font-semibold text-foreground">Add Call Log Entry</h2>

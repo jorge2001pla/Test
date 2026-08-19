@@ -4,6 +4,41 @@ import { buildFollowUpSections, type FollowUpRow } from "@/lib/business-logic";
 import { formatCurrency, formatDaysLeft } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
 import type { ClientWithPreview } from "@/lib/clients";
+import { PRODUCT_INTERESTS, type Client } from "@/lib/types";
+
+const INTEREST_TAGS: Record<string, string> = Object.fromEntries(
+  PRODUCT_INTERESTS.map((i) => [i.key, i.tag])
+);
+
+/** Compact qualification/interest tags under the client name — capped at two
+ * interests plus a "+n" so the table never widens; full detail lives on the profile. */
+function ProfileTags({ client }: { client: Client }) {
+  const shown = client.productInterests.slice(0, 2);
+  const extra = client.productInterests.length - shown.length;
+  if (client.qualification !== "QUALIFIED" && shown.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {client.qualification === "QUALIFIED" && (
+        <span className="rounded bg-gold/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gold dark:text-gold-bright">
+          Qualified
+        </span>
+      )}
+      {shown.map((k) => (
+        <span
+          key={k}
+          className="rounded border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+        >
+          {INTEREST_TAGS[k]}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span className="rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+          +{extra}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +75,7 @@ function FollowUpTable({
                 {client.opener && (
                   <div className="text-xs text-muted-foreground">Opener: {client.opener}</div>
                 )}
+                <ProfileTags client={client} />
                 {fallbackPitch && (
                   <div className="mt-1 inline-flex items-center gap-1 rounded bg-gold/15 px-1.5 py-0.5 text-xs text-gold dark:text-gold-bright">
                     Pitch Double Eagles as a bullion alternative

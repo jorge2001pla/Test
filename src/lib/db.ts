@@ -133,6 +133,12 @@ async function ensureSchema(): Promise<void> {
   await addColumnIfMissing("promotions", "kind", "TEXT NOT NULL DEFAULT 'PROMOTION'");
   await addColumnIfMissing("clients", "email", "TEXT");
   await addColumnIfMissing("reminders", "book_client_id", "TEXT");
+  // V1 qualification/interest/onboarding tracking — independent of disposition.
+  // Interests and sent emails are comma-separated canonical keys; existing rows
+  // default to UNKNOWN / none, which the UI treats as sensible empty states.
+  await addColumnIfMissing("clients", "qualification", "TEXT NOT NULL DEFAULT 'UNKNOWN'");
+  await addColumnIfMissing("clients", "product_interests", "TEXT");
+  await addColumnIfMissing("clients", "onboarding_emails", "TEXT");
 
   // shipments.tracking_number became tracking_link (holds a pasted USPS/FedEx tracking URL now,
   // not just a raw number) — rename the column on any table created before this change.

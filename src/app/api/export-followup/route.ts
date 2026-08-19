@@ -1,4 +1,5 @@
 import { listClients } from "@/lib/clients";
+import { ONBOARDING_EMAILS, PRODUCT_INTERESTS } from "@/lib/types";
 
 function csvCell(value: string | number | null): string {
   const str = value == null ? "" : String(value);
@@ -27,12 +28,35 @@ export async function GET() {
   const clients = await listClients();
   const notInBook = clients.filter((c) => !c.bookClientId);
 
-  const header = ["First Name", "Last Name", "Email", "Phone Number", "Status", "Opener"];
+  const interestLabels = new Map<string, string>(PRODUCT_INTERESTS.map((i) => [i.key, i.label]));
+  const emailLabels = new Map<string, string>(ONBOARDING_EMAILS.map((e) => [e.key, e.label]));
+
+  const header = [
+    "First Name",
+    "Last Name",
+    "Email",
+    "Phone Number",
+    "Status",
+    "Opener",
+    "Qualification",
+    "Product Interests",
+    "Onboarding Emails Sent",
+  ];
   const lines = [header.map(csvCell).join(",")];
   for (const c of notInBook) {
     const [firstName, ...rest] = c.name.trim().split(/\s+/);
     lines.push(
-      [firstName ?? "", rest.join(" "), c.email, toE164(c.phone), c.status, c.opener]
+      [
+        firstName ?? "",
+        rest.join(" "),
+        c.email,
+        toE164(c.phone),
+        c.status,
+        c.opener,
+        c.qualification,
+        c.productInterests.map((k) => interestLabels.get(k) ?? k).join("; "),
+        c.onboardingEmails.map((k) => emailLabels.get(k) ?? k).join("; "),
+      ]
         .map(csvCell)
         .join(",")
     );

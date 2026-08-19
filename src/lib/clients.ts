@@ -1,13 +1,26 @@
 import { randomUUID } from "node:crypto";
 import db, { ready } from "./db";
 import { localDateTimeString } from "./business-logic";
-import type { CallLogEntry, Client, ClientStatus, ClientWithCallLog } from "./types";
+import {
+  ONBOARDING_EMAILS,
+  PRODUCT_INTERESTS,
+  type CallLogEntry,
+  type Client,
+  type ClientStatus,
+  type ClientWithCallLog,
+  type OnboardingEmailKey,
+  type ProductInterestKey,
+  type Qualification,
+} from "./types";
 
 interface ClientRowDb {
   id: string;
   name: string;
   phone: string;
   email: string | null;
+  qualification: string | null;
+  product_interests: string | null;
+  onboarding_emails: string | null;
   opener: string | null;
   first_sale_date: string;
   first_sale_amount: number | null;
@@ -27,12 +40,24 @@ interface CallLogRowDb {
   resulting_status: ClientStatus;
 }
 
+const INTEREST_KEYS = new Set<string>(PRODUCT_INTERESTS.map((i) => i.key));
+const EMAIL_KEYS = new Set<string>(ONBOARDING_EMAILS.map((e) => e.key));
+
+/** Comma-separated stored keys → validated key array (unknown values dropped). */
+function parseKeys<T extends string>(raw: string | null, valid: Set<string>): T[] {
+  if (!raw) return [];
+  return raw.split(",").filter((k) => valid.has(k)) as T[];
+}
+
 function mapClient(row: ClientRowDb): Client {
   return {
     id: row.id,
     name: row.name,
     phone: row.phone,
     email: row.email,
+    qualification: row.qualification === "QUALIFIED" ? "QUALIFIED" : "UNKNOWN",
+    productInterests: parseKeys<ProductInterestKey>(row.product_interests, INTEREST_KEYS),
+    onboardingEmails: parseKeys<OnboardingEmailKey>(row.onboarding_emails, EMAIL_KEYS),
     opener: row.opener,
     firstSaleDate: row.first_sale_date,
     firstSaleAmount: row.first_sale_amount,
@@ -259,6 +284,31 @@ export async function updateClientDetails(clientId: string, d: ClientDetailsUpda
     sql: `UPDATE clients SET name = ?, phone = ?, email = ?, opener = ?, first_sale_date = ?,
           first_sale_amount = ?, updated_at = datetime('now') WHERE id = ?`,
     args: [d.name, d.phone, d.email, d.opener, d.firstSaleDate, d.firstSaleAmount, clientId],
+  });
+}
+
+export interface ClientProfileExtras {
+  qualification: Qualification;
+  productInterests: ProductInterestKey[];
+  onboardingEmails: OnboardingEmailKey[];
+}
+
+/** Saves the V1 qualification/interest/onboarding fields — fully independent of
+ * disposition, callbacks, and the 15-day window logic. */
+export async function updateClientProfileExtras(
+  clientId: string,
+  extras: ClientProfileExtras
+): Promise<void> {
+  await ready();
+  await db.execute({
+    sql: `UPDATE clients SET qualification = ?, product_interests = ?, onboarding_emails = ?,
+          updated_at = datetime('now') WHERE id = ?`,
+    args: [
+      extras.qualification === "QUALIFIED" ? "QUALIFIED" : "UNKNOWN",
+      extras.productInterests.filter((k) => INTEREST_KEYS.has(k)).join(",") || null,
+      extras.onboardingEmails.filter((k) => EMAIL_KEYS.has(k)).join(",") || null,
+      clientId,
+    ],
   });
 }
 

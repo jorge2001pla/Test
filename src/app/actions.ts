@@ -10,7 +10,9 @@ import {
   linkClientToBook,
   unlinkClientFromBook,
   updateClientDetails,
+  updateClientProfileExtras,
   type ClientDetailsUpdate,
+  type ClientProfileExtras,
   type NewClientInput,
 } from "@/lib/clients";
 import {
@@ -285,6 +287,16 @@ export async function updateClientDetailsAction(
     opener: d.opener?.trim() || null,
   });
   revalidatePath("/");
+  revalidatePath("/follow-up");
+  revalidatePath(`/clients/${clientId}`);
+}
+
+export async function updateClientProfileExtrasAction(
+  clientId: string,
+  extras: ClientProfileExtras
+): Promise<void> {
+  if (!clientId) throw new Error("Missing client.");
+  await updateClientProfileExtras(clientId, extras);
   revalidatePath("/follow-up");
   revalidatePath(`/clients/${clientId}`);
 }
