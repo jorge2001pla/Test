@@ -178,16 +178,43 @@ export async function createBookClient(input: NewBookClientInput): Promise<BookC
   return mapBookClient(res.rows[0] as unknown as BookClientRowDb);
 }
 
-/** Count of manually-added book clients created within [startIso, endIso) — used for the weekly
- * new-client goal and trend chart. Excludes bulk-imported legacy rows, whose created_at reflects
- * when they were loaded rather than a real "added this week" event. */
+/** Who "I opened it" refers to — the owner of this command center. Openers matching this name
+ * count a 50% client toward the weekly goal the week it was opened. */
+const OWNER_OPENER = new RegExp(`\\b(${(process.env.OWNER_OPENER ?? "jorge|george").toLowerCase()})\\b`, "i");
+
+/**
+ * New clients within [startIso, endIso) for the weekly goal, counted once per person:
+ *  - book clients added directly (source='manual', not created by a 50% conversion), by created_at
+ *  - 50% clients the owner opened, by first_sale_date (the week they were opened)
+ *  - 50% clients someone else opened that were SOLD in the window (the week of the sale)
+ * Bulk-imported legacy book rows (source='import') never count.
+ */
 export async function countBookClientsCreatedInRange(startIso: string, endIso: string): Promise<number> {
   await ready();
-  const res = await db.execute({
-    sql: "SELECT COUNT(*) as cnt FROM book_clients WHERE source = 'manual' AND created_at >= ? AND created_at < ?",
-    args: [startIso, endIso],
-  });
-  return Number((res.rows[0] as unknown as { cnt: number | string }).cnt);
+  const startDate = startIso.slice(0, 10);
+  const endDate = endIso.slice(0, 10);
+  const [direct, opened, sold] = await Promise.all([
+    db.execute({
+      sql: `SELECT COUNT(*) as cnt FROM book_clients
+            WHERE source = 'manual' AND created_at >= ? AND created_at < ?
+              AND id NOT IN (SELECT book_client_id FROM clients WHERE book_client_id IS NOT NULL)`,
+      args: [startIso, endIso],
+    }),
+    db.execute({
+      sql: "SELECT opener FROM clients WHERE first_sale_date >= ? AND first_sale_date < ?",
+      args: [startDate, endDate],
+    }),
+    db.execute({
+      sql: `SELECT DISTINCT c.id, c.opener FROM clients c
+            JOIN call_log_entries e ON e.client_id = c.id
+            WHERE e.resulting_status = 'SOLD' AND e.timestamp >= ? AND e.timestamp < ?`,
+      args: [startIso, endIso],
+    }),
+  ]);
+  const isOwner = (o: unknown) => typeof o === "string" && OWNER_OPENER.test(o);
+  const ownerOpened = (opened.rows as unknown as { opener: string | null }[]).filter((r) => isOwner(r.opener)).length;
+  const soldByOthers = (sold.rows as unknown as { opener: string | null }[]).filter((r) => !isOwner(r.opener)).length;
+  return Number((direct.rows[0] as unknown as { cnt: number | string }).cnt) + ownerOpened + soldByOthers;
 }
 
 /** Clears a stale callback without logging a call — resets to No Dispo so the client leaves
