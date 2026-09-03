@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import db, { ready } from "./db";
 import { localDateTimeString } from "./business-logic";
+import { parseMarks, sweepOnboarding, type OnboardingMarks } from "./onboarding";
 import {
   ONBOARDING_EMAILS,
   PRODUCT_INTERESTS,
@@ -21,6 +22,9 @@ interface ClientRowDb {
   qualification: string | null;
   product_interests: string | null;
   onboarding_emails: string | null;
+  onboarding_started_at: string | null;
+  onboarding_auto: string | null;
+  onboarding_marks: string | null;
   opener: string | null;
   first_sale_date: string;
   first_sale_amount: number | null;
@@ -58,6 +62,8 @@ function mapClient(row: ClientRowDb): Client {
     qualification: row.qualification === "QUALIFIED" ? "QUALIFIED" : "UNKNOWN",
     productInterests: parseKeys<ProductInterestKey>(row.product_interests, INTEREST_KEYS),
     onboardingEmails: parseKeys<OnboardingEmailKey>(row.onboarding_emails, EMAIL_KEYS),
+    onboardingStartedAt: row.onboarding_started_at ?? null,
+    onboardingMarks: parseMarks(row.onboarding_marks),
     opener: row.opener,
     firstSaleDate: row.first_sale_date,
     firstSaleAmount: row.first_sale_amount,
@@ -82,6 +88,7 @@ function mapCallLog(row: CallLogRowDb): CallLogEntry {
 
 export async function listClients(): Promise<Client[]> {
   await ready();
+  await sweepOnboarding().catch(() => undefined);
   const res = await db.execute("SELECT * FROM clients");
   return (res.rows as unknown as ClientRowDb[]).map(mapClient);
 }
@@ -119,6 +126,7 @@ export async function listClientsWithLastCallNote(): Promise<ClientWithPreview[]
 
 export async function getClient(id: string): Promise<ClientWithCallLog | undefined> {
   await ready();
+  await sweepOnboarding().catch(() => undefined);
   const res = await db.execute({ sql: "SELECT * FROM clients WHERE id = ?", args: [id] });
   const row = (res.rows[0] as unknown as ClientRowDb) ?? undefined;
   if (!row) return undefined;
@@ -145,8 +153,8 @@ export async function createClient(input: NewClientInput): Promise<Client> {
   await ready();
   const id = randomUUID();
   await db.execute({
-    sql: `INSERT INTO clients (id, name, phone, email, opener, first_sale_date, first_sale_amount, status, notes)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO clients (id, name, phone, email, opener, first_sale_date, first_sale_amount, status, notes, onboarding_started_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       input.name,
@@ -157,6 +165,7 @@ export async function createClient(input: NewClientInput): Promise<Client> {
       input.firstSaleAmount ?? null,
       input.status ?? "NO_DISPO",
       input.notes ?? null,
+      input.email?.trim() ? new Date().toISOString() : null,
     ],
   });
   return (await getClient(id))!;
@@ -282,8 +291,10 @@ export async function updateClientDetails(clientId: string, d: ClientDetailsUpda
   await ready();
   await db.execute({
     sql: `UPDATE clients SET name = ?, phone = ?, email = ?, opener = ?, first_sale_date = ?,
-          first_sale_amount = ?, updated_at = datetime('now') WHERE id = ?`,
-    args: [d.name, d.phone, d.email, d.opener, d.firstSaleDate, d.firstSaleAmount, clientId],
+          first_sale_amount = ?,
+          onboarding_started_at = CASE WHEN onboarding_started_at IS NULL AND ? != '' THEN ? ELSE onboarding_started_at END,
+          updated_at = datetime('now') WHERE id = ?`,
+    args: [d.name, d.phone, d.email, d.opener, d.firstSaleDate, d.firstSaleAmount, d.email?.trim() ?? "", new Date().toISOString(), clientId],
   });
 }
 
@@ -300,13 +311,21 @@ export async function updateClientProfileExtras(
   extras: ClientProfileExtras
 ): Promise<void> {
   await ready();
+  const cur = await db.execute({ sql: "SELECT onboarding_emails, onboarding_marks FROM clients WHERE id = ?", args: [clientId] });
+  const row = cur.rows[0] as unknown as { onboarding_emails: string | null; onboarding_marks: string | null } | undefined;
+  const before = new Set((row?.onboarding_emails ?? "").split(",").filter(Boolean));
+  const marks: OnboardingMarks = parseMarks(row?.onboarding_marks);
+  const next = extras.onboardingEmails.filter((k) => EMAIL_KEYS.has(k));
+  for (const k of next) if (!before.has(k)) marks[k] = { at: new Date().toISOString(), by: "manual" };
+  for (const k of Object.keys(marks) as OnboardingEmailKey[]) if (!next.includes(k)) delete marks[k];
   await db.execute({
-    sql: `UPDATE clients SET qualification = ?, product_interests = ?, onboarding_emails = ?,
+    sql: `UPDATE clients SET qualification = ?, product_interests = ?, onboarding_emails = ?, onboarding_marks = ?,
           updated_at = datetime('now') WHERE id = ?`,
     args: [
       extras.qualification === "QUALIFIED" ? "QUALIFIED" : "UNKNOWN",
       extras.productInterests.filter((k) => INTEREST_KEYS.has(k)).join(",") || null,
-      extras.onboardingEmails.filter((k) => EMAIL_KEYS.has(k)).join(",") || null,
+      next.join(",") || null,
+      JSON.stringify(marks),
       clientId,
     ],
   });

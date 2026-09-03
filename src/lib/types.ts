@@ -48,6 +48,10 @@ export interface Client {
   qualification: Qualification;
   productInterests: ProductInterestKey[];
   onboardingEmails: OnboardingEmailKey[];
+  /** ISO instant the client first had an email on file — the Klaviyo onboarding flow starts here. */
+  onboardingStartedAt: string | null;
+  /** Per-email: when it was ticked and whether by the auto-marker or by hand. */
+  onboardingMarks: Partial<Record<OnboardingEmailKey, { at: string; by: "auto" | "manual" }>>;
   opener: string | null;
   firstSaleDate: string;
   firstSaleAmount: number | null;

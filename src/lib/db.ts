@@ -139,6 +139,11 @@ async function ensureSchema(): Promise<void> {
   await addColumnIfMissing("clients", "qualification", "TEXT NOT NULL DEFAULT 'UNKNOWN'");
   await addColumnIfMissing("clients", "product_interests", "TEXT");
   await addColumnIfMissing("clients", "onboarding_emails", "TEXT");
+  // Onboarding auto-marking (Sept 2026): when the Klaviyo flow started for this client, which
+  // boxes the auto-marker has already applied (never re-applied), and per-box timestamps.
+  await addColumnIfMissing("clients", "onboarding_started_at", "TEXT");
+  await addColumnIfMissing("clients", "onboarding_auto", "TEXT");
+  await addColumnIfMissing("clients", "onboarding_marks", "TEXT");
 
   // shipments.tracking_number became tracking_link (holds a pasted USPS/FedEx tracking URL now,
   // not just a raw number) — rename the column on any table created before this change.

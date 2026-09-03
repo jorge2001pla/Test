@@ -125,6 +125,9 @@ export default async function ClientDetailPage({
         initialQualification={client.qualification}
         initialInterests={client.productInterests}
         initialEmails={client.onboardingEmails}
+        hasEmail={Boolean(client.email?.trim())}
+        startedAt={client.onboardingStartedAt}
+        initialMarks={client.onboardingMarks}
       />
 
       <div className="rounded-lg border border-border bg-card p-5">

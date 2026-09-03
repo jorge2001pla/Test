@@ -10,22 +10,57 @@ import {
 } from "@/lib/types";
 import { updateClientProfileExtrasAction } from "@/app/actions";
 
+type Mark = { at: string; by: "auto" | "manual" };
+
+/** Klaviyo's onboarding flow timing, mirrored here so the boxes tick themselves. */
+const AFTER_MS: Record<OnboardingEmailKey, number> = {
+  WELCOME: 60 * 60_000,
+  MORGAN: 60 * 60_000,
+  DOUBLE_EAGLE: 24 * 60 * 60_000,
+  TOP_COINS: 48 * 60 * 60_000,
+};
+
+function fmt(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function untilLabel(due: Date, now: Date) {
+  const ms = due.getTime() - now.getTime();
+  if (ms <= 0) return "due now";
+  const m = Math.round(ms / 60_000);
+  if (m < 60) return `in ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 36) return `in ${h} h`;
+  return `in ${Math.round(h / 24)} days`;
+}
+
 /** V1 qualification / product interest / onboarding email tracker on the client
- * profile. Every control saves immediately — no separate save button to forget. */
+ * profile. Every control saves immediately — no separate save button to forget.
+ * Onboarding boxes also tick themselves on Klaviyo's schedule (see lib/onboarding.ts);
+ * hand toggles still win. */
 export default function ClientProfileExtras({
   clientId,
   initialQualification,
   initialInterests,
   initialEmails,
+  hasEmail = true,
+  startedAt = null,
+  initialMarks = {},
 }: {
   clientId: string;
   initialQualification: Qualification;
   initialInterests: ProductInterestKey[];
   initialEmails: OnboardingEmailKey[];
+  hasEmail?: boolean;
+  startedAt?: string | null;
+  initialMarks?: Partial<Record<OnboardingEmailKey, Mark>>;
 }) {
   const [qualification, setQualification] = useState<Qualification>(initialQualification);
   const [interests, setInterests] = useState<ProductInterestKey[]>(initialInterests);
   const [emails, setEmails] = useState<OnboardingEmailKey[]>(initialEmails);
+  const [marks, setMarks] = useState<Partial<Record<OnboardingEmailKey, Mark>>>(initialMarks);
   const [pending, startTransition] = useTransition();
 
   // React batches state during rapid clicks, so reading state inside handlers can be
@@ -63,11 +98,21 @@ export default function ClientProfileExtras({
 
   function toggleEmail(key: OnboardingEmailKey) {
     const cur = latest.current.emails;
-    const next = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
+    const on = !cur.includes(key);
+    const next = on ? [...cur, key] : cur.filter((k) => k !== key);
     latest.current = { ...latest.current, emails: next };
     setEmails(next);
+    setMarks((m) => {
+      const copy = { ...m };
+      if (on) copy[key] = { at: new Date().toISOString(), by: "manual" };
+      else delete copy[key];
+      return copy;
+    });
     save();
   }
+
+  const now = new Date();
+  const started = startedAt ? new Date(startedAt) : null;
 
   return (
     <div className="rounded-lg border border-border bg-card p-5">
@@ -130,24 +175,48 @@ export default function ClientProfileExtras({
       </div>
 
       <div className="mt-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Onboarding Emails
-        </p>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Onboarding Emails
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {!hasEmail
+              ? "No email on file — Klaviyo flow won't start"
+              : started
+                ? `Klaviyo flow started ${fmt(started.toISOString())} · boxes tick on its schedule`
+                : "Klaviyo flow starts when an email is added"}
+          </p>
+        </div>
         <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-          {ONBOARDING_EMAILS.map((item) => (
-            <label
-              key={item.key}
-              className="flex cursor-pointer items-center gap-2.5 rounded border border-transparent px-1 py-1 text-sm text-foreground hover:border-border"
-            >
-              <input
-                type="checkbox"
-                checked={emails.includes(item.key)}
-                onChange={() => toggleEmail(item.key)}
-                className="h-4 w-4 accent-[#c99622]"
-              />
-              {item.label}
-            </label>
-          ))}
+          {ONBOARDING_EMAILS.map((item) => {
+            const on = emails.includes(item.key);
+            const mark = marks[item.key];
+            const due = started ? new Date(started.getTime() + AFTER_MS[item.key]) : null;
+            const hint = on
+              ? mark
+                ? `${mark.by === "auto" ? "auto" : "by hand"} · ${fmt(mark.at)}`
+                : "sent"
+              : due && hasEmail
+                ? `${untilLabel(due, now)} · ${fmt(due.toISOString())}`
+                : null;
+            return (
+              <label
+                key={item.key}
+                className="flex cursor-pointer items-start gap-2.5 rounded border border-transparent px-1 py-1 text-sm text-foreground hover:border-border"
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => toggleEmail(item.key)}
+                  className="mt-0.5 h-4 w-4 accent-[#c99622]"
+                />
+                <span className="flex flex-col">
+                  <span>{item.label}</span>
+                  {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+                </span>
+              </label>
+            );
+          })}
         </div>
       </div>
     </div>
