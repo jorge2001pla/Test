@@ -13,12 +13,12 @@ import { etDate, formatLocalTime, type DateStr } from "./dates";
 import { getConfig, getLinks, mapParty, partyZone, q, type Party, type TaskRow } from "./store";
 
 export const SECTION_TITLES: Record<number, string> = {
-  1: "Promised callbacks — due or overdue",
-  2: "Delivered — awaiting a successful check-in",
-  3: "Shipment exceptions & unresolved service issues",
-  4: "Follow-ups due — inside the original 50% window",
-  5: "Other due 30-day follow-ups",
-  6: "Selected reactivation clients",
+  1: "Promised callbacks",
+  2: "Delivered — check in with the client",
+  3: "Shipments & service issues",
+  4: "Follow-ups — inside the 50% window",
+  5: "Other 30-day follow-ups",
+  6: "Reactivation",
 };
 
 export interface QueueTask {

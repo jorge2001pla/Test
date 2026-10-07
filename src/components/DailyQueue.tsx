@@ -14,9 +14,19 @@ const TONE: Record<string, string> = {
 };
 
 function Row({ row }: { row: QueueRow }) {
-  const comm = commissionLine(row.commission);
   const first = row.tasks[0];
   const shipTask = row.tasks.find((t) => t.shipmentId);
+  const phones = (row.phone ?? "").split(";").map((x) => x.trim()).filter(Boolean);
+  // One quiet status line: only what helps you decide how to work this client right now.
+  const facts: React.ReactNode[] = [];
+  if (row.cycleDay != null) facts.push(<>Day {Math.min(row.cycleDay, 30)}/30</>);
+  if (row.commission.eligibility === "IN_WINDOW") {
+    const c = commissionLine(row.commission);
+    facts.push(<span className={TONE[c.tone]}>50% window: {row.commission.daysRemaining === 1 ? "last day" : `${row.commission.daysRemaining} days left`}</span>);
+  }
+  if (row.lastAttemptAt) facts.push(<>Last called {fmtDay(row.lastAttemptAt)}</>);
+  if (row.lastObjection) facts.push(<>Objection: {row.lastObjection}</>);
+  const restrictions = [row.noCalls && "no calls", row.noText && "no texts", row.noEmail && "no email"].filter(Boolean).join(", ");
   return (
     <li className="px-4 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -25,24 +35,20 @@ function Row({ row }: { row: QueueRow }) {
             <Link href={row.href} className="font-medium text-foreground hover:text-gold hover:underline">
               {row.name}
             </Link>
-            <span className="text-sm text-muted-foreground">{row.phone ?? "—"}</span>
-            <span className="text-xs text-muted-foreground">
-              {row.localTime ? `Their time: ${row.localTime}` : "Time zone unknown (using Eastern)"}
-            </span>
+            <span className="text-sm text-muted-foreground">{phones.join(" · ") || "—"}</span>
+            {row.localTime && <span className="text-xs text-muted-foreground">{row.localTime} their time</span>}
           </div>
           <p className="mt-0.5 text-sm text-foreground">
             {row.why}
-            {first.overdue && (
-              <span className="ml-2 rounded bg-red-500/15 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:text-red-400">
-                overdue
-              </span>
-            )}
-            {row.deadlineWarning && (
-              <span className="ml-2 rounded bg-orange-500/15 px-1.5 py-0.5 text-xs font-medium text-orange-700 dark:text-orange-400">
-                50% window ends on a non-working day — last chance is today
-              </span>
-            )}
+            {first.overdue && <span className="ml-2 rounded bg-red-500/15 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:text-red-400">overdue</span>}
+            {row.deadlineWarning && <span className="ml-2 rounded bg-orange-500/15 px-1.5 py-0.5 text-xs font-medium text-orange-700 dark:text-orange-400">50% window ends on a non-working day — last chance today</span>}
           </p>
+          {(facts.length > 0 || restrictions) && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {facts.map((f, i) => (<span key={i}>{i > 0 && " · "}{f}</span>))}
+              {restrictions && <span className="text-orange-700 dark:text-orange-400">{facts.length > 0 ? " · " : ""}{restrictions}</span>}
+            </p>
+          )}
         </div>
         <LogContactPanel
           partyId={row.partyId}
@@ -55,45 +61,14 @@ function Row({ row }: { row: QueueRow }) {
         />
       </div>
 
-      <div className="mt-1.5 grid gap-x-6 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-2">
-        <span>
-          {row.cycleDay != null ? (
-            <>
-              30-day cycle: <b className="text-foreground">day {Math.min(row.cycleDay, 30)}/30</b> (ends{" "}
-              {fmtDate(row.cycleEnd)})
-            </>
-          ) : (
-            "No active 30-day cycle"
-          )}
-          {row.latestSaleDate && <> · last sale {fmtDate(row.latestSaleDate)}</>}
-        </span>
-        <span className={TONE[comm.tone]}>{comm.text}</span>
-        <span>
-          Last attempt: {fmtDay(row.lastAttemptAt)} · Last conversation: {fmtDay(row.lastConversationAt)}
-        </span>
-        <span>
-          {row.lastPitch && <>Pitch: {row.lastPitch}</>}
-          {row.lastPitch && row.lastObjection && " · "}
-          {row.lastObjection && <>Objection: {row.lastObjection}</>}
-        </span>
-      </div>
-      {(row.noText || row.noCalls || row.noEmail) && (
-        <p className="mt-1 text-xs text-orange-700 dark:text-orange-400">
-          Restrictions:{" "}
-          {[row.noCalls && "no calls", row.noText && "no texts", row.noEmail && "no email"].filter(Boolean).join(", ")}
-        </p>
-      )}
-
       <ul className="mt-2 space-y-1.5 border-l-2 border-gold/40 pl-3">
         {row.tasks.map((t) => (
           <li key={t.id} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
             <div className="text-sm text-foreground">
               {t.purpose}
-              <span className="ml-2 text-xs text-muted-foreground">
-                due {t.dueAt ? fmtInstant(t.dueAt) : fmtDate(t.dueDate)}
-              </span>
+              <span className="ml-2 text-xs text-muted-foreground">{t.dueAt ? fmtInstant(t.dueAt) : fmtDate(t.dueDate)}</span>
             </div>
-            <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
               {t.category === "SHIPMENT" && t.type === "TASK" && !t.shipmentId && t.orderId && <TrackingForm orderId={t.orderId} profilePath={row.href} />}
               {t.category === "SHIPMENT" && t.type === "TASK" && t.shipmentId && <TrackingCheck shipmentId={t.shipmentId} trackingLink={t.detail} profilePath={row.href} />}
               <TaskActions taskId={t.id} timed={t.category === "CALLBACK"} />
@@ -119,8 +94,7 @@ export default function DailyQueue({
     <div className="space-y-5">
       <p className="text-sm text-muted-foreground">
         <b className="text-foreground">{queue.totalClients}</b> client{queue.totalClients === 1 ? "" : "s"} ·{" "}
-        <b className="text-foreground">{queue.totalTasks}</b> task{queue.totalTasks === 1 ? "" : "s"} due. Every due
-        client is listed — there is no cap.
+        <b className="text-foreground">{queue.totalTasks}</b> task{queue.totalTasks === 1 ? "" : "s"} due
       </p>
 
       {queue.upcomingCallbacks.length > 0 && (

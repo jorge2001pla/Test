@@ -13,6 +13,7 @@ const btn = "text-xs text-muted-foreground underline-offset-2 hover:text-gold ho
 export default function TaskActions({ taskId, timed = false }: { taskId: string; timed?: boolean }) {
   const router = useRouter();
   const [mode, setMode] = useState<"none" | "reschedule" | "cancel">("none");
+  const [more, setMore] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState("");
@@ -31,10 +32,15 @@ export default function TaskActions({ taskId, timed = false }: { taskId: string;
 
   return (
     <div className="space-y-1">
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button type="button" disabled={pending} className={btn} onClick={() => run(() => completeTaskAction(taskId))}>Done</button>
-        <button type="button" disabled={pending} className={btn} onClick={() => setMode(mode === "reschedule" ? "none" : "reschedule")}>Reschedule</button>
-        <button type="button" disabled={pending} className={btn} onClick={() => setMode(mode === "cancel" ? "none" : "cancel")}>Cancel</button>
+        <button type="button" className={btn} onClick={() => { setMore((v) => !v); if (more) setMode("none"); }} aria-label="More task options">{more ? "less" : "⋯"}</button>
+        {more && (
+          <>
+            <button type="button" disabled={pending} className={btn} onClick={() => setMode(mode === "reschedule" ? "none" : "reschedule")}>Reschedule</button>
+            <button type="button" disabled={pending} className={btn} onClick={() => setMode(mode === "cancel" ? "none" : "cancel")}>Cancel</button>
+          </>
+        )}
       </div>
       {mode === "reschedule" && (
         <div className="flex flex-wrap items-center gap-2">

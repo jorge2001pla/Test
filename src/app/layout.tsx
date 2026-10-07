@@ -40,7 +40,6 @@ const NAV_LINKS = [
   { href: "/queue", label: "Queue" },
   { href: "/follow-up", label: "50% Follow-Up" },
   { href: "/book", label: "Clients" },
-  { href: "/campaigns", label: "Campaigns" },
 ];
 
 export default function RootLayout({

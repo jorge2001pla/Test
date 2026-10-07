@@ -106,19 +106,21 @@ export default function CallbackAlerts() {
   }
 
   if (pathname === "/login") return null;
+  const onQueue = pathname === "/" || pathname.startsWith("/queue");
+  const shown = alerts.filter((a) => !(a.kind === "QUEUE" && onQueue));
   const askPermission = perm === "default";
-  if (alerts.length === 0 && !askPermission) return null;
+  if (shown.length === 0 && !askPermission) return null;
 
-  const urgent = alerts.filter((a) => a.level !== "UPCOMING").length;
+  const urgent = shown.filter((a) => a.level !== "UPCOMING" && a.kind !== "QUEUE").length;
   return (
     <div className="fixed bottom-4 right-4 z-40 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card shadow-xl" role="status" aria-live="polite">
       <button type="button" onClick={() => setCollapsed((v) => !v)} className={`flex w-full items-center justify-between rounded-t-lg px-3 py-2 text-left text-sm font-semibold ${urgent ? "bg-red-600 text-white" : "bg-blue-600 text-white"}`}>
-        <span>{alerts.length === 0 ? "Alerts" : urgent ? `${urgent} item${urgent === 1 ? "" : "s"} need you` : `${alerts.length} coming up`}</span>
+        <span>{shown.length === 0 ? "Alerts" : urgent ? `${urgent} need${urgent === 1 ? "s" : ""} you now` : `${shown.length} to look at`}</span>
         <span>{collapsed ? "▲" : "▼"}</span>
       </button>
       {!collapsed && (
         <ul className="max-h-80 divide-y divide-border overflow-y-auto">
-          {alerts.map((a) => (
+          {shown.map((a) => (
             <li key={a.id} className="px-3 py-2 text-sm">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="min-w-0">

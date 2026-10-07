@@ -10,16 +10,9 @@ import { listActiveShipments } from "@/lib/shipments";
 import { listActiveReminders } from "@/lib/reminders";
 import { listNotes } from "@/lib/notes";
 import {
-  listActivePromotions,
-  getPromotionProgress,
-  type Promotion,
-  type PromotionProgress,
-} from "@/lib/promotions";
-import {
   buildFollowUpSections,
   buildWorkTheBookQueue,
   currentWeekRange,
-  DORMANT_DAYS,
   localDateString,
   nowET,
   remainingWorkdays,
@@ -46,26 +39,6 @@ export const dynamic = "force-dynamic";
 
 function monthParam(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
-}
-
-function CampaignCard({ promo, progress }: { promo: Promotion; progress: PromotionProgress }) {
-  const href = "/campaigns";
-  const label = promo.kind === "COIN_OF_WEEK" ? "Coin of the Week" : "Active Promotion";
-  return (
-    <Link
-      href={href}
-      className="block rounded-lg border border-gold/40 bg-card p-5 transition-[border-color,box-shadow] hover:shadow-sm"
-    >
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 font-display text-lg font-semibold text-foreground">{promo.name}</p>
-      <div className="mt-3 flex flex-wrap gap-4 text-sm">
-        <span className="text-gold">{progress.emailedCount} emailed</span>
-        <span className="text-gold">{progress.textedCount} texted</span>
-        <span className="text-gold">{progress.calledCount} called</span>
-        <span className="text-muted-foreground">of {progress.totalClients}</span>
-      </div>
-    </Link>
-  );
 }
 
 export default async function DashboardPage({
@@ -100,21 +73,11 @@ export default async function DashboardPage({
   const clients = await listClientsWithLastCallNote();
   const sections = buildFollowUpSections(clients);
   const bookClients = await listBookClientsWithLastContact();
-  const bookCount = bookClients.length;
   const activeShipments = await listActiveShipments();
 
   const workQueue = buildWorkTheBookQueue(bookClients, now);
 
-  const activePromotions = await listActivePromotions();
-  const [campaignCards, valueStats] = await Promise.all([
-    Promise.all(
-      activePromotions.map(async (p) => ({
-        promo: p,
-        progress: await getPromotionProgress(p.id),
-      }))
-    ),
-    getBookValueStats(VALUE_TIER_THRESHOLDS.whale),
-  ]);
+  const valueStats = await getBookValueStats(VALUE_TIER_THRESHOLDS.whale);
 
   const weekRange = currentWeekRange(now);
   const weeklyBookCount = await countBookClientsCreatedInRange(weekRange.start, weekRange.end);
@@ -229,7 +192,7 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-border bg-card p-3">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Weekly goal · {weekRange.label}</p>
           <div className="mt-1 flex items-center gap-3">
@@ -246,15 +209,6 @@ export default async function DashboardPage({
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{formatWholeCurrency(valueStats.totalValue)} of {formatWholeCurrency(WHALE_GOAL_VALUE)}</p>
         </div>
-        {campaignCards.length > 0 ? (
-          <Link href="/campaigns" className="rounded-lg border border-gold/40 bg-card p-3 hover:shadow-sm">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{campaignCards[0].promo.kind === "COIN_OF_WEEK" ? "Coin of the Week" : "Active Promotion"}{campaignCards.length > 1 ? ` (+${campaignCards.length - 1})` : ""}</p>
-            <p className="mt-1 truncate font-medium text-foreground">{campaignCards[0].promo.name}</p>
-            <p className="text-xs text-gold">{campaignCards[0].progress.emailedCount} emailed · {campaignCards[0].progress.textedCount} texted · {campaignCards[0].progress.calledCount} called of {campaignCards[0].progress.totalClients}</p>
-          </Link>
-        ) : (
-          <Link href="/campaigns" className="flex items-center justify-center rounded-lg border border-dashed border-border bg-card p-3 text-sm text-muted-foreground hover:border-gold">No active campaign — start one</Link>
-        )}
       </div>
 
       <div id="queue" className="scroll-mt-4">
@@ -271,10 +225,6 @@ export default async function DashboardPage({
             {exceptionCount > 0 ? `${exceptionCount} exception${exceptionCount === 1 ? "" : "s"} →` : "No exceptions"}
           </Link>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Work it top to bottom: promised callbacks, delivery check-ins, shipment/service issues, then the
-          30-day follow-ups (50% window first), then any reactivation clients you selected.
-        </p>
         <div className="mt-4">
           <DailyQueue queue={queue} basePath="/" />
         </div>
