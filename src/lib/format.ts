@@ -28,8 +28,7 @@ export function formatDate(dateStr: string | null): string {
 }
 
 export function formatDaysLeft(daysLeft: number): string {
-  if (daysLeft <= 0) return "Last Day";
-  if (daysLeft === 1) return "1 day";
+  if (daysLeft <= 1) return "Last Day";
   return `${daysLeft} days`;
 }
 

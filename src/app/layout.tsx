@@ -8,6 +8,8 @@ import SpotPriceTicker from "@/components/SpotPriceTicker";
 import SalesQuoteBanner from "@/components/SalesQuoteBanner";
 import SettingsMenu from "@/components/SettingsMenu";
 import GlobalSearch from "@/components/GlobalSearch";
+import CallbackAlerts from "@/components/CallbackAlerts";
+import Toaster from "@/components/Toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,6 +37,7 @@ export const metadata: Metadata = {
 
 const NAV_LINKS = [
   { href: "/", label: "Dashboard" },
+  { href: "/queue", label: "Queue" },
   { href: "/follow-up", label: "50% Follow-Up" },
   { href: "/book", label: "Clients" },
   { href: "/campaigns", label: "Campaigns" },
@@ -91,6 +94,9 @@ export default function RootLayout({
         </header>
 
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">{children}</main>
+
+        <CallbackAlerts />
+        <Toaster />
 
         <footer className="border-t border-border py-4 text-center text-xs text-muted-foreground">
           Premier Rare Coins &middot; prc.gold

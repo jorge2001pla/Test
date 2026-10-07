@@ -83,19 +83,21 @@ export function localDateString(d: Date = nowET()): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Days left in the 15-day, 50%-commission window. Never negative, never manually set. */
+/** Days left in the 15-day, 50%-commission window, counting today. The opening date is day 1 and
+ * day 15 (opening + 14) is the LAST in-window day, where this returns 1. 0 means the window has
+ * ended. Never negative, never manually set. */
 export function daysLeftInWindow(firstSaleDate: string, now: Date = nowET()): number {
   const since = daysBetween(new Date(firstSaleDate), now);
   return Math.max(0, WINDOW_DAYS - since);
 }
 
 /**
- * True once the 15-day window has actually elapsed (day 16+), as opposed to a client on day 15
- * itself, whose daysLeft is also 0 but who is still in-window for one more day.
+ * True once the 15-day window has actually elapsed (day 16+). Day 15 (opening + 14) is still
+ * in-window — its daysLeft is 1.
  */
 export function isWindowExpired(firstSaleDate: string, now: Date = nowET()): boolean {
   const since = daysBetween(new Date(firstSaleDate), now);
-  return since > WINDOW_DAYS;
+  return since > WINDOW_DAYS - 1;
 }
 
 const DISINTEREST_PHRASES = [
@@ -178,7 +180,7 @@ export function buildFollowUpSections<T extends ClientLike>(
   );
 
   const priority = inWindow
-    .filter((r) => r.client.status === "CALLBACK" || r.daysLeft === 0)
+    .filter((r) => r.client.status === "CALLBACK" || !!r.client.callbackScheduledAt || r.daysLeft === 1)
     .sort(bySpendThenDaysLeft);
 
   const priorityIds = new Set(priority.map((r) => r.client.id));
@@ -220,9 +222,8 @@ export function buildTodaysPriority<T extends ClientLike>(
     if (client.status === "SOLD" || client.status === "NOT_INTERESTED") continue;
 
     const windowClosingToday =
-      !isWindowExpired(client.firstSaleDate, now) && daysLeftInWindow(client.firstSaleDate, now) === 0;
+      !isWindowExpired(client.firstSaleDate, now) && daysLeftInWindow(client.firstSaleDate, now) === 1;
     const callbackToday =
-      client.status === "CALLBACK" &&
       !!client.callbackScheduledAt &&
       client.callbackScheduledAt.slice(0, 10) === today;
 
@@ -316,7 +317,7 @@ interface CallbackLike {
 export function findMissedCallbacks<T extends CallbackLike>(clients: T[], now: Date = nowET()): T[] {
   const todayStart = `${localDateString(now)}T00:00`;
   return clients
-    .filter((c) => c.status === "CALLBACK" && !!c.callbackScheduledAt && c.callbackScheduledAt < todayStart)
+    .filter((c) => !!c.callbackScheduledAt && c.callbackScheduledAt < todayStart)
     .sort((a, b) => (a.callbackScheduledAt as string).localeCompare(b.callbackScheduledAt as string));
 }
 

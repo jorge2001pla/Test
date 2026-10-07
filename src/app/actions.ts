@@ -3,8 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
-  addCallLogEntry,
-  clearCallback,
   createClient,
   getClient,
   linkClientToBook,
@@ -16,8 +14,6 @@ import {
   type NewClientInput,
 } from "@/lib/clients";
 import {
-  addBookCallLogEntry,
-  clearBookCallback,
   createBookClient,
   deleteBookClient,
   getBookClient,
@@ -28,9 +24,6 @@ import {
 } from "@/lib/book";
 import {
   createShipment,
-  markDelivered,
-  setDeliveredCallDone,
-  setShippedCallDone,
   CARRIERS,
   type Carrier,
 } from "@/lib/shipments";
@@ -39,12 +32,13 @@ import { createNote, deleteNote } from "@/lib/notes";
 import {
   createPromotion,
   endPromotion,
-  getActivePromotion,
   markAllEmailed,
   markAllTexted,
   reactivatePromotion,
   type PromotionKind,
 } from "@/lib/promotions";
+import { onShipmentCreated } from "@/lib/followup/shipping";
+import { run } from "@/lib/followup/store";
 import type { ClientStatus } from "@/lib/types";
 import { CLIENT_STATUSES } from "@/lib/types";
 
@@ -85,58 +79,6 @@ export async function createClientAction(formData: FormData): Promise<void> {
   revalidatePath("/");
   revalidatePath("/follow-up");
   redirect("/follow-up");
-}
-
-export async function addCallLogAction(formData: FormData): Promise<void> {
-  const clientId = String(formData.get("clientId") ?? "");
-  const noteText = String(formData.get("noteText") ?? "").trim();
-  const resultingStatus = parseStatus(formData.get("resultingStatus"), "CALLBACK");
-  const scheduledDate = String(formData.get("callbackDate") ?? "").trim();
-  const scheduledTime = String(formData.get("callbackTime") ?? "").trim();
-
-  if (!clientId || !noteText) {
-    throw new Error("A call note is required.");
-  }
-
-  const callbackScheduledAt =
-    resultingStatus === "CALLBACK" && scheduledDate && scheduledTime
-      ? `${scheduledDate}T${scheduledTime}`
-      : null;
-
-  await addCallLogEntry(clientId, noteText, resultingStatus, callbackScheduledAt);
-  revalidatePath("/");
-  revalidatePath(`/clients/${clientId}`);
-  redirect(`/clients/${clientId}`);
-}
-
-export async function addBookCallLogAction(formData: FormData): Promise<void> {
-  const bookClientId = String(formData.get("bookClientId") ?? "");
-  const noteText = String(formData.get("noteText") ?? "").trim();
-  const resultingStatus = parseStatus(formData.get("resultingStatus"), "CALLBACK");
-  const scheduledDate = String(formData.get("callbackDate") ?? "").trim();
-  const scheduledTime = String(formData.get("callbackTime") ?? "").trim();
-
-  if (!bookClientId || !noteText) {
-    throw new Error("A call note is required.");
-  }
-
-  const callbackScheduledAt =
-    resultingStatus === "CALLBACK" && scheduledDate && scheduledTime
-      ? `${scheduledDate}T${scheduledTime}`
-      : null;
-
-  const activePromo = await getActivePromotion();
-  await addBookCallLogEntry(
-    bookClientId,
-    noteText,
-    resultingStatus,
-    callbackScheduledAt,
-    activePromo?.id ?? null
-  );
-  revalidatePath("/");
-  revalidatePath(`/book/${bookClientId}`);
-  revalidatePath("/book");
-  redirect(`/book/${bookClientId}`);
 }
 
 export interface ImportRow {
@@ -235,40 +177,17 @@ export async function createShipmentAction(formData: FormData): Promise<void> {
   const client = await getBookClient(bookClientId);
   if (!client) throw new Error("Client not found");
 
-  await createShipment({
+  const shipment = await createShipment({
     bookClientId,
     carrier: (CARRIERS as string[]).includes(carrierRaw) ? (carrierRaw as Carrier) : "Other",
     trackingLink,
     notes: notes || null,
     saleAmount: saleAmountRaw ? Number(saleAmountRaw) : null,
   });
+  // Tie the shipment to the canonical client + order and queue the "shipped" call.
+  await onShipmentCreated(shipment.id);
   revalidatePath("/");
-  revalidatePath(`/book/${bookClientId}`);
-}
-
-export async function setShippedCallDoneAction(
-  shipmentId: string,
-  bookClientId: string,
-  done: boolean
-): Promise<void> {
-  await setShippedCallDone(shipmentId, done);
-  revalidatePath("/");
-  revalidatePath(`/book/${bookClientId}`);
-}
-
-export async function markDeliveredAction(shipmentId: string, bookClientId: string): Promise<void> {
-  await markDelivered(shipmentId);
-  revalidatePath("/");
-  revalidatePath(`/book/${bookClientId}`);
-}
-
-export async function setDeliveredCallDoneAction(
-  shipmentId: string,
-  bookClientId: string,
-  done: boolean
-): Promise<void> {
-  await setDeliveredCallDone(shipmentId, done);
-  revalidatePath("/");
+  revalidatePath("/queue");
   revalidatePath(`/book/${bookClientId}`);
 }
 
@@ -286,6 +205,16 @@ export async function updateClientDetailsAction(
     email: d.email?.trim() || null,
     opener: d.opener?.trim() || null,
   });
+  // The first sale date IS the opening date for 50%-list accounts — keep the canonical record in
+  // step, unless the opening date was set by hand on the follow-up panel.
+  await run([
+    {
+      sql: `UPDATE parties SET opening_date = ?, updated_at = ?
+            WHERE id = (SELECT party_id FROM clients WHERE id = ?)
+              AND (opening_date_source IS NULL OR opening_date_source = 'clients.first_sale_date')`,
+      args: [d.firstSaleDate.slice(0, 10), new Date().toISOString(), clientId],
+    },
+  ]);
   revalidatePath("/");
   revalidatePath("/follow-up");
   revalidatePath(`/clients/${clientId}`);
@@ -358,51 +287,6 @@ export async function deleteNoteAction(id: string): Promise<void> {
   revalidatePath("/");
 }
 
-export interface QuickCallInput {
-  id: string;
-  noteText: string;
-  resultingStatus: ClientStatus;
-  callbackDate?: string;
-  callbackTime?: string;
-}
-
-function callbackScheduledAtFrom(input: QuickCallInput): string | null {
-  return input.resultingStatus === "CALLBACK" && input.callbackDate && input.callbackTime
-    ? `${input.callbackDate}T${input.callbackTime}`
-    : null;
-}
-
-/** Same as addCallLogAction but doesn't redirect — for logging a call inline from the Dashboard
- * without navigating away from the call queue. */
-export async function quickLogCallAction(input: QuickCallInput): Promise<void> {
-  const noteText = input.noteText.trim();
-  if (!input.id || !noteText) {
-    throw new Error("A call note is required.");
-  }
-  await addCallLogEntry(input.id, noteText, input.resultingStatus, callbackScheduledAtFrom(input));
-  revalidatePath("/");
-  revalidatePath(`/clients/${input.id}`);
-}
-
-/** Book-client counterpart to quickLogCallAction. */
-export async function quickLogBookCallAction(input: QuickCallInput): Promise<void> {
-  const noteText = input.noteText.trim();
-  if (!input.id || !noteText) {
-    throw new Error("A call note is required.");
-  }
-  const activePromo = await getActivePromotion();
-  await addBookCallLogEntry(
-    input.id,
-    noteText,
-    input.resultingStatus,
-    callbackScheduledAtFrom(input),
-    activePromo?.id ?? null
-  );
-  revalidatePath("/");
-  revalidatePath(`/book/${input.id}`);
-  revalidatePath("/book");
-}
-
 export async function updateLifetimeValueAction(bookClientId: string, value: number): Promise<void> {
   if (!bookClientId || !Number.isFinite(value) || value < 0) {
     throw new Error("A valid value is required.");
@@ -446,17 +330,6 @@ export async function reactivatePromotionAction(promotionId: string): Promise<vo
   await reactivatePromotion(promotionId);
   revalidatePath("/");
   revalidatePath("/campaigns");
-}
-
-/** Dismisses a missed callback from the Overdue list without logging a call — resets the client
- * to No Dispo so they rejoin the normal rotation instead of sitting flagged forever. */
-export async function dismissMissedCallbackAction(id: string, kind: "client" | "book"): Promise<void> {
-  if (kind === "client") {
-    await clearCallback(id);
-  } else {
-    await clearBookCallback(id);
-  }
-  revalidatePath("/");
 }
 
 export interface ValueImportRow {

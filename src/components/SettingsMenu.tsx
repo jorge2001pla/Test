@@ -35,6 +35,27 @@ export default function SettingsMenu() {
       {open && (
         <div className="absolute right-0 top-11 z-20 min-w-[12rem] rounded-lg border border-border bg-card py-1 shadow-lg">
           <Link
+            href="/settings/follow-up"
+            onClick={() => setOpen(false)}
+            className="block px-4 py-2 text-sm text-foreground hover:bg-gold/10 hover:text-gold"
+          >
+            Follow-Up Rules
+          </Link>
+          <Link
+            href="/duplicates"
+            onClick={() => setOpen(false)}
+            className="block px-4 py-2 text-sm text-foreground hover:bg-gold/10 hover:text-gold"
+          >
+            Duplicate Review
+          </Link>
+          <Link
+            href="/reports"
+            onClick={() => setOpen(false)}
+            className="block px-4 py-2 text-sm text-foreground hover:bg-gold/10 hover:text-gold"
+          >
+            Follow-Up Reports
+          </Link>
+          <Link
             href="/import"
             onClick={() => setOpen(false)}
             className="block px-4 py-2 text-sm text-foreground hover:bg-gold/10 hover:text-gold"

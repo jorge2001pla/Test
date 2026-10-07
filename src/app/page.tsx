@@ -6,27 +6,20 @@ import {
   countBookClientsCreatedInRange,
   getBookValueStats,
 } from "@/lib/book";
-import { listActiveShipments, listShipmentsNeedingCallToday } from "@/lib/shipments";
-import { listActiveReminders, listDueClientFollowUps } from "@/lib/reminders";
+import { listActiveShipments } from "@/lib/shipments";
+import { listActiveReminders } from "@/lib/reminders";
 import { listNotes } from "@/lib/notes";
 import {
   listActivePromotions,
   getPromotionProgress,
-  listClientsNotCalledSince,
   type Promotion,
   type PromotionProgress,
 } from "@/lib/promotions";
 import {
   buildFollowUpSections,
-  buildTodaysPriority,
   buildWorkTheBookQueue,
   currentWeekRange,
-  DAILY_QUEUE_TARGET,
-  daysLeftInWindow,
   DORMANT_DAYS,
-  daysSince,
-  findMissedCallbacks,
-  isNearingExpiryUncalled,
   localDateString,
   nowET,
   remainingWorkdays,
@@ -35,8 +28,7 @@ import {
   WHALE_GOAL_COUNT,
   WHALE_GOAL_VALUE,
 } from "@/lib/business-logic";
-import { formatCallbackTime, formatDate, formatTimeOnly, formatWholeCurrency } from "@/lib/format";
-import type { ClientStatus } from "@/lib/types";
+import { formatDate, formatTimeOnly, formatWholeCurrency } from "@/lib/format";
 import MonthCalendar, { type CalendarCallback } from "@/components/MonthCalendar";
 import ShipmentActions from "@/components/ShipmentActions";
 import ReminderItem from "@/components/ReminderItem";
@@ -44,9 +36,11 @@ import NoteItem from "@/components/NoteItem";
 import WeeklyTrendChart from "@/components/WeeklyTrendChart";
 import PhoneLink from "@/components/PhoneLink";
 import TrackingLink from "@/components/TrackingLink";
-import PriorityRowItem, { type PriorityRowData } from "@/components/PriorityRowItem";
-import OverdueRowItem from "@/components/OverdueRowItem";
+import DailyQueue from "@/components/DailyQueue";
 import { createReminderAction, createNoteAction } from "@/app/actions";
+import { getDailyQueue, getExceptions } from "@/lib/followup/queue";
+import { reconcile } from "@/lib/followup/reconcile";
+import { ensurePartyForBook } from "@/lib/followup/store";
 
 export const dynamic = "force-dynamic";
 
@@ -74,32 +68,14 @@ function CampaignCard({ promo, progress }: { promo: Promotion; progress: Promoti
   );
 }
 
-/** Row shape used while building the list — adds sort/grouping fields dropped before rendering. */
-interface BuildRow extends PriorityRowData {
-  sortKey: string;
-  /** 0 = 50% expiring soon, 1 = callback today, 2 = shipment needs a call, 3 = delivery
-   * follow-up due (check-in / upsell), 4 = no-answer today (circle back), 5 = active promo not
-   * yet called, 6 = backlog fill. */
-  tier: number;
-}
-
-interface OverdueRow {
-  id: string;
-  name: string;
-  phone: string;
-  href: string;
-  status: ClientStatus;
-  reasonLabel: string;
-  kind: "client" | "book";
-}
-
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; qp?: string }>;
 }) {
-  const { month: monthParamValue } = await searchParams;
+  const { month: monthParamValue, qp } = await searchParams;
   const now = nowET();
+  const instant = new Date();
 
   let year = now.getFullYear();
   let month = now.getMonth();
@@ -109,45 +85,41 @@ export default async function DashboardPage({
     month = m - 1;
   }
 
+  // Housekeeping first (idempotent): roll up missed steps, close ended cycles, import callbacks.
+  await reconcile(instant);
+  const [queue, exceptions] = await Promise.all([
+    getDailyQueue(instant, { page: Number(qp) || 1 }),
+    getExceptions(instant),
+  ]);
+  const exceptionCount =
+    exceptions.noNextAction.length +
+    exceptions.overdueCallbacks.length +
+    exceptions.missedSteps.length +
+    exceptions.unconfirmedDeliveries.length;
+
   const clients = await listClientsWithLastCallNote();
   const sections = buildFollowUpSections(clients);
   const bookClients = await listBookClientsWithLastContact();
   const bookCount = bookClients.length;
-  const todaysWindowAndCallbacks = buildTodaysPriority(clients, now);
   const activeShipments = await listActiveShipments();
-  const shipmentsNeedingCall = await listShipmentsNeedingCallToday();
 
   const workQueue = buildWorkTheBookQueue(bookClients, now);
-  const dormantCount = workQueue.filter((e) => e.kind === "dormant").length;
 
   const activePromotions = await listActivePromotions();
-  // A single call counts toward every active campaign, so a client only clears the queue once
-  // they've been called since the most-recently-started campaign began.
-  const newestCampaignStart = activePromotions.reduce<string | null>(
-    (max, p) => (max === null || p.createdAt > max ? p.createdAt : max),
-    null
-  );
-  const [campaignCards, promoTargets, valueStats] = await Promise.all([
+  const [campaignCards, valueStats] = await Promise.all([
     Promise.all(
       activePromotions.map(async (p) => ({
         promo: p,
         progress: await getPromotionProgress(p.id),
       }))
     ),
-    newestCampaignStart ? listClientsNotCalledSince(newestCampaignStart) : Promise.resolve([]),
     getBookValueStats(VALUE_TIER_THRESHOLDS.whale),
   ]);
-  const newestCampaign = activePromotions.find((p) => p.createdAt === newestCampaignStart) ?? null;
-
-  const neverCalled15Day = clients.filter(
-    (c) => c.lastCallNote === null && isNearingExpiryUncalled(c.firstSaleDate, now)
-  );
 
   const weekRange = currentWeekRange(now);
   const weeklyBookCount = await countBookClientsCreatedInRange(weekRange.start, weekRange.end);
 
   // Daily trend for now — the book is young, so weekly bars hid the day-to-day movement.
-  // Once there's more history, switch back to recentWeekRanges(TREND_WEEKS) weekly bars.
   const TREND_DAYS = 14;
   const dayRanges = Array.from({ length: TREND_DAYS }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (TREND_DAYS - 1 - i));
@@ -174,245 +146,11 @@ export default async function DashboardPage({
   }));
   const dailyPace = Math.ceil(WEEKLY_GOAL / 5);
 
-  const missedClientCallbacks = findMissedCallbacks(clients, now);
-  const missedBookCallbacks = findMissedCallbacks(bookClients, now);
-
-  const overdueRows: OverdueRow[] = [
-    ...missedClientCallbacks.map((c) => ({
-      id: c.id,
-      name: c.name,
-      phone: c.phone,
-      href: `/clients/${c.id}`,
-      status: c.status,
-      reasonLabel: `Missed callback — was ${formatCallbackTime(c.callbackScheduledAt)}`,
-      kind: "client" as const,
-    })),
-    ...missedBookCallbacks.map((c) => ({
-      id: c.id,
-      name: [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unnamed",
-      phone: c.phone ?? "—",
-      href: `/book/${c.id}`,
-      status: c.status,
-      reasonLabel: `Missed callback — was ${formatCallbackTime(c.callbackScheduledAt)}`,
-      kind: "book" as const,
-    })),
-  ];
-
   const today = localDateString(now);
-  const todayStart = `${today}T00:00`;
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const todayEnd = `${localDateString(tomorrow)}T00:00`;
-  const todaysBookCallbacks = await listScheduledBookCallbacks(todayStart, todayEnd);
-
   const reminders = await listActiveReminders();
   const notes = await listNotes();
-  // Client-linked follow-ups (post-delivery check-in / upsell) live in the priority queue when
-  // due, so the Overdue safety net only needs the freestanding reminders.
+  // Client-linked reminders predate the persistent task system; only freestanding ones are shown.
   const overdueReminders = reminders.filter((r) => r.dueAt && r.dueAt < today && !r.bookClientId);
-  const dueFollowUps = await listDueClientFollowUps(today);
-
-  // Tier 0 — 50% expiring soon: window closes today, or (window-closing + callback both today).
-  const expiringSoonRows: BuildRow[] = [
-    ...todaysWindowAndCallbacks
-      .filter((row) => row.reason === "window-closing" || row.reason === "both")
-      .map((row) => ({
-        id: row.client.id,
-        name: row.client.name,
-        phone: row.client.phone,
-        href: `/clients/${row.client.id}`,
-        status: row.client.status,
-        reasonLabel:
-          row.reason === "both" && row.callbackScheduledAt
-            ? `Last day — callback at ${formatTimeOnly(row.callbackScheduledAt)}`
-            : "Window closes today",
-        sortKey: row.callbackScheduledAt ?? "",
-        tier: 0,
-        kind: "client" as const,
-        muted: false,
-      })),
-    ...neverCalled15Day.map((c) => ({
-      id: c.id,
-      name: c.name,
-      phone: c.phone,
-      href: `/clients/${c.id}`,
-      status: c.status,
-      reasonLabel: `Never called — ${daysLeftInWindow(c.firstSaleDate, now)} day${daysLeftInWindow(c.firstSaleDate, now) === 1 ? "" : "s"} left`,
-      sortKey: "",
-      tier: 0,
-      kind: "client" as const,
-      muted: false,
-    })),
-  ];
-
-  // Tier 1 — callbacks scheduled for today (15-day clients and book clients alike).
-  const callbackTodayRows: BuildRow[] = [
-    ...todaysWindowAndCallbacks
-      .filter((row) => row.reason === "callback")
-      .map((row) => ({
-        id: row.client.id,
-        name: row.client.name,
-        phone: row.client.phone,
-        href: `/clients/${row.client.id}`,
-        status: row.client.status,
-        reasonLabel: row.callbackScheduledAt ? `Callback at ${formatTimeOnly(row.callbackScheduledAt)}` : "",
-        sortKey: row.callbackScheduledAt ?? "",
-        tier: 1,
-        kind: "client" as const,
-        muted: false,
-      })),
-    ...todaysBookCallbacks.map((cb) => ({
-      id: cb.bookClientId,
-      name: cb.clientName,
-      phone: cb.clientPhone ?? "—",
-      href: `/book/${cb.bookClientId}`,
-      status: "CALLBACK" as ClientStatus,
-      reasonLabel: `Callback at ${formatTimeOnly(cb.scheduledAt)}`,
-      sortKey: cb.scheduledAt,
-      tier: 1,
-      kind: "book" as const,
-      muted: false,
-    })),
-  ];
-
-  // Tier 2 — shipments with an actual call due right now (shipped or delivered, not yet called about).
-  const shipmentRows: BuildRow[] = shipmentsNeedingCall.map((s) => {
-    const type: "shipped" | "delivered" = s.shippedCallDone ? "delivered" : "shipped";
-    return {
-      id: s.id,
-      name: s.clientName,
-      phone: s.clientPhone ?? "—",
-      href: `/book/${s.bookClientId}`,
-      status: s.clientStatus,
-      reasonLabel: type === "shipped" ? "Shipped — call to confirm" : "Delivered — call to confirm",
-      sortKey: "",
-      tier: 2,
-      kind: "book" as const,
-      muted: false,
-      shipmentAction: { shipmentId: s.id, bookClientId: s.bookClientId, type },
-    };
-  });
-
-  // Tier 3 — delivery follow-ups that came due: the auto-created post-delivery check-in and
-  // upsell calls. Logging any real call for the client marks them done; until then they stay.
-  const followUpRows: BuildRow[] = dueFollowUps.map((r) => {
-    // Reminder text is "Label — Name (order info)"; the row already shows the name, so the
-    // reason column keeps just the label and order info.
-    const dashAt = r.text.indexOf(" — ");
-    const label = dashAt > -1 ? r.text.slice(0, dashAt) : r.text;
-    const orderInfo = r.text.match(/\(([^)]*)\)\s*$/)?.[1];
-    return {
-      id: r.bookClientId as string,
-      name: r.clientName,
-      phone: r.clientPhone ?? "—",
-      href: `/book/${r.bookClientId}`,
-      status: r.clientStatus,
-      reasonLabel: orderInfo ? `${label} — ${orderInfo}` : label,
-      sortKey: r.dueAt ?? "",
-      tier: 3,
-      kind: "book" as const,
-      muted: false,
-    };
-  });
-
-  // Tier 4 — circle-backs: dispo'd Not Available today (no answer / left a VM). An attempt is
-  // not a completed touch — they stay on today's list so Jorge retries before end of day.
-  const retryRows: BuildRow[] = [
-    ...clients
-      .filter((c) => c.status === "NOT_AVAILABLE" && !!c.lastCallAt && c.lastCallAt >= todayStart)
-      .map((c) => ({
-        id: c.id,
-        name: c.name,
-        phone: c.phone,
-        href: `/clients/${c.id}`,
-        status: c.status,
-        reasonLabel: `No answer at ${formatTimeOnly(c.lastCallAt as string)} — circle back`,
-        sortKey: c.lastCallAt as string,
-        tier: 4,
-        kind: "client" as const,
-        muted: false,
-      })),
-    ...bookClients
-      .filter((c) => c.status === "NOT_AVAILABLE" && !!c.lastContactAt && c.lastContactAt >= todayStart)
-      .map((c) => ({
-        id: c.id,
-        name: [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unnamed",
-        phone: c.phone ?? "—",
-        href: `/book/${c.id}`,
-        status: c.status,
-        reasonLabel: `No answer at ${formatTimeOnly(c.lastContactAt as string)} — circle back`,
-        sortKey: c.lastContactAt as string,
-        tier: 4,
-        kind: "book" as const,
-        muted: false,
-      })),
-  ];
-
-  // Shipment rows are keyed by shipment id, so dedupe follow-ups against the shipment's
-  // underlying client too — one client, one row: the shipment call covers the touch.
-  const preFollowUpIds = new Set([
-    ...[...expiringSoonRows, ...callbackTodayRows, ...shipmentRows].map((r) => r.id),
-    ...shipmentRows.map((r) => r.shipmentAction!.bookClientId),
-  ]);
-  const dedupedFollowUps = followUpRows.filter((r) => !preFollowUpIds.has(r.id));
-  const preRetryIds = new Set([...preFollowUpIds, ...dedupedFollowUps.map((r) => r.id)]);
-  const dueTodayRows: BuildRow[] = [
-    ...expiringSoonRows,
-    ...callbackTodayRows,
-    ...shipmentRows,
-    ...dedupedFollowUps,
-    ...retryRows.filter((r) => !preRetryIds.has(r.id)),
-  ];
-
-  // Tier 5 — active promo push, not yet called, biggest clients first — only enough to round
-  // the list toward the daily target (a promo push shouldn't itself blow past the target).
-  const dueTodayIds = new Set(dueTodayRows.map((r) => r.id));
-  const promoFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length);
-  const promoRows: BuildRow[] = newestCampaign
-    ? promoTargets
-        .filter((c) => !dueTodayIds.has(c.id))
-        .slice(0, promoFillCount)
-        .map((c) => ({
-          id: c.id,
-          name: [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unnamed",
-          phone: c.phone ?? "—",
-          href: `/book/${c.id}`,
-          status: c.status,
-          reasonLabel: activePromotions.length > 1 ? "Campaign — call needed" : `Promo — ${newestCampaign.name}`,
-          sortKey: "",
-          tier: 5,
-          kind: "book" as const,
-          muted: false,
-        }))
-    : [];
-  for (const r of promoRows) dueTodayIds.add(r.id);
-
-  // Tier 6 — backlog fill, only enough to round the list out to the daily target.
-  const backlogFillCount = Math.max(0, DAILY_QUEUE_TARGET - dueTodayRows.length - promoRows.length);
-  const backlogRows: BuildRow[] = workQueue
-    .filter((e) => !dueTodayIds.has(e.client.id))
-    .slice(0, backlogFillCount)
-    .map((e) => ({
-      id: e.client.id,
-      name: [e.client.firstName, e.client.lastName].filter(Boolean).join(" ") || "Unnamed",
-      phone: e.client.phone ?? "—",
-      href: `/book/${e.client.id}`,
-      status: e.client.status,
-      reasonLabel:
-        e.kind === "dormant"
-          ? `Backlog — cold ${daysSince(e.client.lastContactAt as string, now)} days`
-          : "Backlog — never contacted",
-      sortKey: "",
-      tier: 6,
-      kind: "book" as const,
-      muted: true,
-    }));
-
-  const priorityRows: PriorityRowData[] = [...dueTodayRows, ...promoRows, ...backlogRows]
-    .sort((a, b) => {
-      if (a.tier !== b.tier) return a.tier - b.tier;
-      return a.sortKey && b.sortKey ? a.sortKey.localeCompare(b.sortKey) : a.name.localeCompare(b.name);
-    })
-    .map(({ sortKey: _sortKey, tier: _tier, ...row }) => row);
 
   const monthStart = `${year}-${String(month + 1).padStart(2, "0")}-01T00:00`;
   const nextMonthDate = new Date(year, month + 1, 1);
@@ -443,7 +181,6 @@ export default async function DashboardPage({
       href: `/book/${cb.bookClientId}`,
     });
   }
-  // 15-day and book callbacks are merged per day above — order each day's list by time.
   for (const day of Object.keys(callbacksByDay)) {
     callbacksByDay[day].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   }
@@ -461,6 +198,11 @@ export default async function DashboardPage({
       : workdaysLeft === 0
         ? `${weeklyRemaining} short of goal with no workdays left this week.`
         : `Need ${weeklyRemaining} more by Wed — about ${Math.ceil(weeklyRemaining / workdaysLeft)}/day.`;
+
+  // Shipments still in progress: not delivered, or delivered but receipt not confirmed, or an open issue.
+  const shipmentRows = await Promise.all(
+    activeShipments.map(async (s) => ({ s, partyId: s.partyId ?? (await ensurePartyForBook(s.bookClientId)) }))
+  );
 
   return (
     <div className="space-y-6">
@@ -553,80 +295,32 @@ export default async function DashboardPage({
       </div>
 
       <div>
-        <h2 className="font-display text-lg font-semibold text-foreground">Today&apos;s Priority</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="font-display text-lg font-semibold text-foreground">Today&apos;s Queue</h2>
+          <Link
+            href="/queue/exceptions"
+            className={
+              exceptionCount > 0
+                ? "rounded border border-red-500/50 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-500/10 dark:text-red-400"
+                : "rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:border-gold"
+            }
+          >
+            {exceptionCount > 0 ? `${exceptionCount} exception${exceptionCount === 1 ? "" : "s"} →` : "No exceptions"}
+          </Link>
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Your call list for the day, top to bottom — 50% clients expiring soon, then callbacks
-          scheduled for today, then shipments needing a call, then delivery follow-ups
-          (check-in and upsell), filled out from your backlog so there&apos;s always{" "}
-          {DAILY_QUEUE_TARGET} to work.
+          Work it top to bottom: promised callbacks, delivery check-ins, shipment/service issues, then the
+          30-day follow-ups (50% window first), then any reactivation clients you selected.
         </p>
         <div className="mt-4">
-          {priorityRows.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Nothing due, and your backlog is clear. Great spot to be in.
-            </p>
-          ) : (
-            <>
-              <div className="overflow-x-auto rounded-lg border border-border bg-card">
-                <table className="min-w-full divide-y divide-border text-sm">
-                  <thead className="bg-background text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2">Client</th>
-                      <th className="px-4 py-2">Phone</th>
-                      <th className="px-4 py-2">Why Today</th>
-                      <th className="px-4 py-2">Status</th>
-                      <th className="px-4 py-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {priorityRows.map((row) => (
-                      <PriorityRowItem key={row.href} row={row} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {(promoRows.length > 0 || backlogRows.length > 0) && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {promoRows.length > 0 && (
-                    <>
-                      {promoRows.length} from your active{" "}
-                      <Link
-                        href="/campaigns"
-                        className="underline hover:text-gold"
-                      >
-                        {activePromotions.length > 1 ? "campaigns" : "campaign"}
-                      </Link>
-                      {backlogRows.length > 0 && ", "}
-                    </>
-                  )}
-                  {backlogRows.length > 0 && (
-                    <>
-                      {backlogRows.length} pulled from your{" "}
-                      <Link href="/reactivate" className="underline hover:text-gold">
-                        backlog
-                      </Link>
-                    </>
-                  )}{" "}
-                  to round out today.
-                </p>
-              )}
-            </>
-          )}
+          <DailyQueue queue={queue} basePath="/" />
         </div>
       </div>
 
-      {(overdueRows.length > 0 || overdueReminders.length > 0) && (
+      {overdueReminders.length > 0 && (
         <div className="rounded-lg border border-red-600/40 bg-card p-5 dark:border-red-400/40">
-          <h2 className="font-display text-lg font-semibold text-red-600 dark:text-red-400">
-            Overdue
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Callbacks that passed without a call, and reminders you set that came due.
-          </p>
+          <h2 className="font-display text-lg font-semibold text-red-600 dark:text-red-400">Overdue reminders</h2>
           <ul className="mt-3 divide-y divide-border">
-            {overdueRows.map((row) => (
-              <OverdueRowItem key={`${row.href}-${row.reasonLabel}`} row={row} />
-            ))}
             {overdueReminders.map((r) => (
               <ReminderItem key={r.id} id={r.id} text={r.text} dueAt={r.dueAt} overdue />
             ))}
@@ -648,14 +342,12 @@ export default async function DashboardPage({
       <div>
         <h2 className="font-display text-lg font-semibold text-foreground">Shipments</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Personal client orders that have shipped, waiting on your shipped/delivered calls.
-          Drops off once both calls are checked off.
+          Orders in transit, delivered-but-unconfirmed, or with an open issue. A shipment leaves this list only when
+          the client confirms receipt — an unanswered call never clears it.
         </p>
         <div className="mt-4">
-          {activeShipments.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No shipments in progress.
-            </p>
+          {shipmentRows.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No shipments in progress.</p>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-border bg-card">
               <table className="min-w-full divide-y divide-border text-sm">
@@ -664,13 +356,13 @@ export default async function DashboardPage({
                     <th className="px-4 py-2">Client</th>
                     <th className="px-4 py-2">Phone</th>
                     <th className="px-4 py-2">Tracking</th>
-                    <th className="px-4 py-2">Shipped</th>
-                    <th className="px-4 py-2">Actions</th>
+                    <th className="px-4 py-2">Shipped / expected</th>
+                    <th className="px-4 py-2">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {activeShipments.map((s) => (
-                    <tr key={s.id} className="hover:bg-gold/5">
+                  {shipmentRows.map(({ s, partyId }) => (
+                    <tr key={s.id} className="align-top hover:bg-gold/5">
                       <td className="px-4 py-3">
                         <Link
                           href={`/book/${s.bookClientId}`}
@@ -687,18 +379,22 @@ export default async function DashboardPage({
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {formatDate(s.shippedAt)}
-                        {s.deliveredAt && (
-                          <div className="text-xs">Delivered {formatDate(s.deliveredAt)}</div>
+                        {s.expectedDelivery && !s.deliveredAt && (
+                          <div className="text-xs">Est. delivery {formatDate(s.expectedDelivery)} (estimate)</div>
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <ShipmentActions
-                          shipmentId={s.id}
-                          bookClientId={s.bookClientId}
-                          shippedCallDone={s.shippedCallDone}
-                          deliveredAt={s.deliveredAt}
-                          deliveredCallDone={s.deliveredCallDone}
-                        />
+                        {partyId && (
+                          <ShipmentActions
+                            shipmentId={s.id}
+                            partyId={partyId}
+                            name={s.clientName}
+                            deliveredDate={s.deliveredDate ?? (s.deliveredAt ? s.deliveredAt.slice(0, 10) : null)}
+                            receiptConfirmed={!!s.receiptConfirmedAt}
+                            openIssue={s.exception && !s.exceptionResolvedAt ? s.exception : null}
+                            profilePath={`/book/${s.bookClientId}`}
+                          />
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -812,12 +508,12 @@ export default async function DashboardPage({
           href="/reactivate"
           className="block rounded-lg border border-border bg-card p-5 transition-[border-color,box-shadow] hover:border-gold hover:shadow-sm"
         >
-          <h2 className="font-display text-lg font-semibold text-foreground">Work the Book</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">Reactivation</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Gone cold ({DORMANT_DAYS}+ days) or never contacted at all.
+            Clients whose 30-day cycle ended, plus the cold book ({DORMANT_DAYS}+ days). You choose who to work.
           </p>
           <p className="mt-3 text-2xl font-semibold text-gold">
-            {workQueue.length} <span className="text-sm font-normal text-muted-foreground">to work</span>
+            {workQueue.length} <span className="text-sm font-normal text-muted-foreground">cold in the book</span>
           </p>
         </Link>
       </div>

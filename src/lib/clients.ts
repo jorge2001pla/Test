@@ -245,8 +245,7 @@ export async function listScheduledCallbacks(
   await ready();
   const res = await db.execute({
     sql: `SELECT id, name, phone, callback_scheduled_at FROM clients
-          WHERE status = 'CALLBACK'
-            AND callback_scheduled_at IS NOT NULL
+          WHERE callback_scheduled_at IS NOT NULL
             AND callback_scheduled_at >= ?
             AND callback_scheduled_at < ?
           ORDER BY callback_scheduled_at ASC`,

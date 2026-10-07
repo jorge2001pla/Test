@@ -1,12 +1,8 @@
 import { randomUUID } from "node:crypto";
 import db, { ready } from "./db";
-import { localDateString, localDateTimeString, nowET } from "./business-logic";
-import { formatWholeCurrency } from "./format";
+import { localDateTimeString, nowET } from "./business-logic";
 import type { ClientStatus } from "./types";
 
-/** Days after delivery until the auto-created check-in and upsell follow-up calls come due. */
-export const POST_DELIVERY_CHECKIN_DAYS = 1;
-export const POST_DELIVERY_UPSELL_DAYS = 5;
 
 export type Carrier = "USPS" | "FedEx" | "Other";
 
@@ -25,6 +21,13 @@ export interface Shipment {
   deliveredCallDone: boolean;
   createdAt: string;
   updatedAt: string;
+  partyId: string | null;
+  orderId: string | null;
+  expectedDelivery: string | null;
+  deliveredDate: string | null;
+  receiptConfirmedAt: string | null;
+  exception: string | null;
+  exceptionResolvedAt: string | null;
 }
 
 export interface ShipmentWithClient extends Shipment {
@@ -46,6 +49,13 @@ interface ShipmentRowDb {
   delivered_call_done: number;
   created_at: string;
   updated_at: string;
+  party_id: string | null;
+  order_id: string | null;
+  expected_delivery: string | null;
+  delivered_date: string | null;
+  receipt_confirmed_at: string | null;
+  exception: string | null;
+  exception_resolved_at: string | null;
 }
 
 function mapShipment(row: ShipmentRowDb): Shipment {
@@ -62,7 +72,20 @@ function mapShipment(row: ShipmentRowDb): Shipment {
     deliveredCallDone: !!row.delivered_call_done,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    partyId: row.party_id ?? null,
+    orderId: row.order_id ?? null,
+    expectedDelivery: row.expected_delivery ?? null,
+    deliveredDate: row.delivered_date ?? null,
+    receiptConfirmedAt: row.receipt_confirmed_at ?? null,
+    exception: row.exception ?? null,
+    exceptionResolvedAt: row.exception_resolved_at ?? null,
   };
+}
+
+/** True while a shipment still needs attention: not delivered, delivered but receipt unconfirmed,
+ * or carrying an unresolved issue. (Receipt confirmation, not an unanswered call, closes it.) */
+export function shipmentNeedsAttention(s: Shipment): boolean {
+  return !s.deliveredAt || !s.receiptConfirmedAt || (!!s.exception && !s.exceptionResolvedAt);
 }
 
 export async function listShipmentsForClient(bookClientId: string): Promise<Shipment[]> {
@@ -81,9 +104,9 @@ export async function listActiveShipments(): Promise<ShipmentWithClient[]> {
     `SELECT s.*, b.first_name, b.last_name, b.phone, b.status
      FROM shipments s
      JOIN book_clients b ON b.id = s.book_client_id
-     WHERE s.shipped_call_done = 0
-        OR s.delivered_at IS NULL
-        OR s.delivered_call_done = 0
+     WHERE s.delivered_at IS NULL
+        OR s.receipt_confirmed_at IS NULL
+        OR (s.exception IS NOT NULL AND s.exception_resolved_at IS NULL)
      ORDER BY s.shipped_at ASC`
   );
   const rows = res.rows as unknown as (ShipmentRowDb & {
@@ -205,41 +228,9 @@ export async function markDelivered(id: string): Promise<void> {
     },
   ];
 
-  // Delivery kicks off the follow-up chain: a check-in call shortly after the coin lands, then
-  // an upsell call while it's still exciting. Only on the first delivery mark — re-marking a
-  // shipment delivered shouldn't spawn duplicate follow-ups.
-  if (!row.delivered_at) {
-    const name = [row.first_name, row.last_name].filter(Boolean).join(" ") || "Unnamed";
-    const orderLabel = row.sale_amount
-      ? `${formatWholeCurrency(row.sale_amount)} order delivered ${nowDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-      : `order delivered ${nowDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-    const checkinDue = new Date(nowDate);
-    checkinDue.setDate(checkinDue.getDate() + POST_DELIVERY_CHECKIN_DAYS);
-    const upsellDue = new Date(nowDate);
-    upsellDue.setDate(upsellDue.getDate() + POST_DELIVERY_UPSELL_DAYS);
-    statements.push(
-      {
-        sql: `INSERT INTO reminders (id, text, due_at, book_client_id, created_at) VALUES (?, ?, ?, ?, ?)`,
-        args: [
-          randomUUID(),
-          `Post-delivery check-in — ${name} (${orderLabel})`,
-          localDateString(checkinDue),
-          row.book_client_id,
-          now,
-        ],
-      },
-      {
-        sql: `INSERT INTO reminders (id, text, due_at, book_client_id, created_at) VALUES (?, ?, ?, ?, ?)`,
-        args: [
-          randomUUID(),
-          `Upsell opportunity — ${name} (${orderLabel})`,
-          localDateString(upsellDue),
-          row.book_client_id,
-          now,
-        ],
-      }
-    );
-  }
+  // Delivery check-ins are persistent follow-up tasks now (see followup/shipping.ts recordDelivery);
+  // the old auto-created +1d / +5d reminders are retired.
+  void row;
 
   await db.batch(statements, "write");
 }

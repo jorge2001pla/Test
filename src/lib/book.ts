@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import db, { ready } from "./db";
 import { localDateTimeString } from "./business-logic";
+import { isOwnerOpener } from "./owner";
 import type { CallLogEntry, ClientStatus } from "./types";
 
 export interface BookClient {
@@ -178,9 +179,6 @@ export async function createBookClient(input: NewBookClientInput): Promise<BookC
   return mapBookClient(res.rows[0] as unknown as BookClientRowDb);
 }
 
-/** Who "I opened it" refers to — the owner of this command center. Openers matching this name
- * count a 50% client toward the weekly goal the week it was opened. */
-const OWNER_OPENER = new RegExp(`\\b(${(process.env.OWNER_OPENER ?? "jorge|george").toLowerCase()})\\b`, "i");
 
 /**
  * New clients within [startIso, endIso) for the weekly goal, counted once per person:
@@ -211,7 +209,7 @@ export async function countBookClientsCreatedInRange(startIso: string, endIso: s
       args: [startIso, endIso],
     }),
   ]);
-  const isOwner = (o: unknown) => typeof o === "string" && OWNER_OPENER.test(o);
+  const isOwner = isOwnerOpener;
   const ownerOpened = (opened.rows as unknown as { opener: string | null }[]).filter((r) => isOwner(r.opener)).length;
   const soldByOthers = (sold.rows as unknown as { opener: string | null }[]).filter((r) => !isOwner(r.opener)).length;
   return Number((direct.rows[0] as unknown as { cnt: number | string }).cnt) + ownerOpened + soldByOthers;
@@ -347,8 +345,7 @@ export async function listScheduledBookCallbacks(
   await ready();
   const res = await db.execute({
     sql: `SELECT id, first_name, last_name, phone, callback_scheduled_at FROM book_clients
-          WHERE status = 'CALLBACK'
-            AND callback_scheduled_at IS NOT NULL
+          WHERE callback_scheduled_at IS NOT NULL
             AND callback_scheduled_at >= ?
             AND callback_scheduled_at < ?
           ORDER BY callback_scheduled_at ASC`,

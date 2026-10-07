@@ -38,3 +38,15 @@ The Premier Rare Coins **command center** — a CRM Jorge Pla (coin salesman, wo
 # Working with Jorge
 
 Direct and practical. Prefers a short brainstorm/confirm before big builds, then "do it all." Dashboard must require near-zero thinking each morning. Utility features go in the Settings gear menu, not new nav tabs. Always verify changes in the browser and deploy when done — Jorge uses the live URL, not localhost.
+
+# 30-day follow-up system (added Oct 2026)
+
+Code lives in `src/lib/followup/` (pure rules: `dates`, `commission`, `cadence`, `outcomes`, `config`; DB: `store`, `sales`, `contacts`, `shipping`, `tasks`, `reconcile`, `queue`, `admin`, `profile`). Server actions: `src/app/followup-actions.ts`.
+
+- **Two separate clocks.** Commission window: opening date = day 1, day 15 = opening + 14, repeat sales never extend it, unknown opening date shows "unknown". Follow-up cycle: each qualifying sale restarts it, sale date = day 1, day 30 = sale + 29. Never substitute one for the other. `daysLeftInWindow` returns 1 on the last day, 0 once expired.
+- **One canonical person** (`parties`) above `clients` (50% list) and `book_clients`; linked only by explicit link or user-confirmed merge — never by name. Persistent `fu_tasks` (pending/completed/cancelled/superseded), `fu_contacts`, `fu_orders`, `fu_cycles` (one ACTIVE per person, enforced by a unique index). Legacy call logs/dispositions remain and are mirrored on every logged contact; legacy `callback_scheduled_at` mirrors the earliest pending callback task.
+- Times: instants are UTC ISO; business dates are Eastern `YYYY-MM-DD`. All writes are one `db.batch` and idempotent (`idem_key` / `dedupe_key`).
+- `reconcile()` runs on dashboard/queue load: rolls missed cadence steps up (no catch-up calls), closes ended cycles, enforces GHOST/do-not-contact.
+- **Tests:** `npm test` (vitest) always runs against a throwaway local `file:` DB (see `__tests__/setup.ts`) — never prod. **Local UI check:** `npm run dev:local` (port 3010, throwaway DB, login test/test). `npm run dev` points at the PRODUCTION Turso DB.
+- Backfill (Settings → Follow-Up Rules) is preview-then-apply and idempotent; it never invents contacts or catch-up calls.
+- In-app callback alerts only (browser tab open, 30 s poll). No background/phone notifications exist.

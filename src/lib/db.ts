@@ -1,4 +1,5 @@
 import { createClient, type Client } from "@libsql/client";
+import { FOLLOWUP_COLUMNS, FOLLOWUP_INDEXES, FOLLOWUP_SCHEMA } from "./followup/schema";
 
 declare global {
   var __prcDb: Client | undefined;
@@ -153,6 +154,13 @@ async function ensureSchema(): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     if (!/no such column/i.test(message)) throw err;
   }
+
+  // 30-day follow-up system — purely additive (new tables + nullable columns).
+  await db.executeMultiple(FOLLOWUP_SCHEMA);
+  for (const [table, column, definition] of FOLLOWUP_COLUMNS) {
+    await addColumnIfMissing(table, column, definition);
+  }
+  await db.executeMultiple(FOLLOWUP_INDEXES);
 }
 
 async function addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {

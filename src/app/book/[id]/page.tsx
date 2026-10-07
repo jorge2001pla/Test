@@ -5,13 +5,14 @@ import { listShipmentsForClient, CARRIERS } from "@/lib/shipments";
 import { formatCallbackTime, formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { suggestsFallbackPitch } from "@/lib/business-logic";
 import StatusBadge from "@/components/StatusBadge";
-import CallbackScheduleFields from "@/components/CallbackScheduleFields";
+import FollowUpPanel from "@/components/FollowUpPanel";
 import ShipmentActions from "@/components/ShipmentActions";
 import PhoneLink from "@/components/PhoneLink";
 import TrackingLink from "@/components/TrackingLink";
 import LifetimeValueEditor from "@/components/LifetimeValueEditor";
 import EditClientDetails from "@/components/EditClientDetails";
-import { addBookCallLogAction, createShipmentAction } from "@/app/actions";
+import { createShipmentAction } from "@/app/actions";
+import { ensurePartyForBook } from "@/lib/followup/store";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export default async function BookClientDetailPage({
 
   const name = [client.firstName, client.lastName].filter(Boolean).join(" ") || "Unnamed";
   const shipments = await listShipmentsForClient(client.id);
+  const partyId = await ensurePartyForBook(client.id);
   const fallbackPitch =
     suggestsFallbackPitch(client.notes) ||
     client.callLogEntries.some((entry) => suggestsFallbackPitch(entry.noteText));
@@ -77,7 +79,7 @@ export default async function BookClientDetailPage({
           </div>
         )}
 
-        {client.status === "CALLBACK" && client.callbackScheduledAt && (
+        {client.callbackScheduledAt && (
           <div className="mt-4 rounded bg-gold/15 px-3 py-2 text-sm text-gold dark:text-gold-bright">
             Callback scheduled for {formatCallbackTime(client.callbackScheduledAt)}
           </div>
@@ -92,6 +94,8 @@ export default async function BookClientDetailPage({
           </div>
         )}
       </div>
+
+      {partyId && <FollowUpPanel partyId={partyId} profilePath={`/book/${client.id}`} />}
 
       <div className="rounded-lg border border-border bg-card p-5">
         <h2 className="font-display text-lg font-semibold text-foreground">Shipments</h2>
@@ -172,6 +176,7 @@ export default async function BookClientDetailPage({
                   <span className="text-muted-foreground">
                     Shipped {formatDate(s.shippedAt)}
                     {s.deliveredAt && ` · Delivered ${formatDate(s.deliveredAt)}`}
+                    {s.expectedDelivery && !s.deliveredAt && ` · Est. delivery ${formatDate(s.expectedDelivery)} (estimate)`}
                   </span>
                 </div>
                 {s.saleAmount != null && (
@@ -179,48 +184,22 @@ export default async function BookClientDetailPage({
                 )}
                 {s.notes && <p className="mt-1 text-sm text-muted-foreground">{s.notes}</p>}
                 <div className="mt-2">
-                  <ShipmentActions
-                    shipmentId={s.id}
-                    bookClientId={client.id}
-                    shippedCallDone={s.shippedCallDone}
-                    deliveredAt={s.deliveredAt}
-                    deliveredCallDone={s.deliveredCallDone}
-                  />
+                  {partyId && (
+                    <ShipmentActions
+                      shipmentId={s.id}
+                      partyId={partyId}
+                      name={name}
+                      deliveredDate={s.deliveredDate ?? (s.deliveredAt ? s.deliveredAt.slice(0, 10) : null)}
+                      receiptConfirmed={!!s.receiptConfirmedAt}
+                      openIssue={s.exception && !s.exceptionResolvedAt ? s.exception : null}
+                      profilePath={`/book/${client.id}`}
+                    />
+                  )}
                 </div>
               </li>
             ))}
           </ul>
         )}
-      </div>
-
-      <div className="rounded-lg border border-border bg-card p-5">
-        <h2 className="font-display text-lg font-semibold text-foreground">Add Call Log Entry</h2>
-        <form action={addBookCallLogAction} className="mt-3 space-y-3">
-          <input type="hidden" name="bookClientId" value={client.id} />
-          <div>
-            <label className="mb-1 block text-sm text-muted-foreground" htmlFor="noteText">
-              What happened on the call?
-            </label>
-            <textarea
-              id="noteText"
-              name="noteText"
-              required
-              rows={3}
-              className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
-            />
-          </div>
-          <CallbackScheduleFields
-            defaultStatus={client.status}
-            defaultDate={client.callbackScheduledAt?.split("T")[0]}
-            defaultTime={client.callbackScheduledAt?.split("T")[1]}
-          />
-          <button
-            type="submit"
-            className="rounded bg-gold px-4 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
-          >
-            Log Call
-          </button>
-        </form>
       </div>
 
       <div>

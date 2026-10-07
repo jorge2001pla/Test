@@ -6,10 +6,16 @@ import StatusBadge from "@/components/StatusBadge";
 import PhoneLink from "@/components/PhoneLink";
 import ValueBadge from "@/components/ValueBadge";
 import QuickLogCall from "@/components/QuickLogCall";
+import ReactivationReview from "@/components/ReactivationReview";
+import { listReactivationPool } from "@/lib/followup/admin";
+import { reconcile } from "@/lib/followup/reconcile";
 
 export const dynamic = "force-dynamic";
 
-export default async function ReactivatePage() {
+export default async function ReactivatePage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+  const { view } = await searchParams;
+  await reconcile(new Date());
+  const pool = await listReactivationPool({ state: view === "dismissed" ? "DISMISSED" : "ELIGIBLE", limit: 200 });
   const now = nowET();
   const allClients = await listBookClientsWithLastContact();
   const queue = buildWorkTheBookQueue(allClients, now);
@@ -29,6 +35,16 @@ export default async function ReactivatePage() {
         </p>
       </div>
 
+      <section className="space-y-2 rounded-lg border border-gold/40 bg-card p-4">
+        <h2 className="font-display text-lg font-semibold text-foreground">Finished their 30-day cycle ({pool.total})</h2>
+        <p className="text-sm text-muted-foreground">
+          Clients who didn’t respond (or whose cycle ended) and aren’t GHOST or do-not-contact. Nothing enters your daily queue until you select them.
+          <Link href={view === "dismissed" ? "/reactivate" : "/reactivate?view=dismissed"} className="ml-2 text-gold hover:underline">{view === "dismissed" ? "Show eligible" : "Show dismissed"}</Link>
+        </p>
+        {pool.rows.length === 0 ? <p className="text-sm text-muted-foreground">No one waiting for review.</p> : <ReactivationReview rows={pool.rows} />}
+      </section>
+
+      <h2 className="font-display text-lg font-semibold text-foreground">Cold book (reference)</h2>
       {queue.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
           Nothing to work right now — everyone&apos;s either been touched recently or is already on
