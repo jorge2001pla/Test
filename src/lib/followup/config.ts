@@ -19,6 +19,9 @@ export interface FollowUpConfig extends CallingRules {
   pageSize: number;
   /** Days after tracking is added before the “has it been delivered?” reminder comes due. */
   trackingCheckDays: number;
+  /** Sales goals — every sale you record counts. */
+  dailySalesGoal: number;
+  monthlySalesGoal: number;
 }
 
 export const DEFAULT_CONFIG: FollowUpConfig = {
@@ -33,6 +36,8 @@ export const DEFAULT_CONFIG: FollowUpConfig = {
   companyRules: { maxCallAttemptsPerDay: 1, allowTexts: true, allowVoicemails: true },
   pageSize: 50,
   trackingCheckDays: 4,
+  dailySalesGoal: 5,
+  monthlySalesGoal: 100,
 };
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -68,6 +73,8 @@ export function parseConfig(raw: string | null | undefined): FollowUpConfig {
   if (!(cfg.callbackGraceMinutes >= 0)) cfg.callbackGraceMinutes = DEFAULT_CONFIG.callbackGraceMinutes;
   if (!(cfg.pageSize >= 10 && cfg.pageSize <= 500)) cfg.pageSize = DEFAULT_CONFIG.pageSize;
   if (!(cfg.trackingCheckDays >= 1 && cfg.trackingCheckDays <= 30)) cfg.trackingCheckDays = DEFAULT_CONFIG.trackingCheckDays;
+  if (!(cfg.dailySalesGoal >= 1 && cfg.dailySalesGoal <= 500)) cfg.dailySalesGoal = DEFAULT_CONFIG.dailySalesGoal;
+  if (!(cfg.monthlySalesGoal >= 1 && cfg.monthlySalesGoal <= 5000)) cfg.monthlySalesGoal = DEFAULT_CONFIG.monthlySalesGoal;
   return cfg;
 }
 

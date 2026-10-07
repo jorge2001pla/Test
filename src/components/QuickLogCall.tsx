@@ -8,7 +8,6 @@ interface Resolved {
   partyId: string;
   name: string;
   hasBook: boolean;
-  openingKnown: boolean;
 }
 
 /** Drop-in “Log Contact” button for screens that only know the legacy record id (campaign board,
@@ -41,7 +40,6 @@ export default function QuickLogCall({ id, kind }: { id: string; kind: "client" 
           partyId={resolved.partyId}
           name={resolved.name}
           hasBook={resolved.hasBook}
-          openingKnown={resolved.openingKnown}
           initialOpen
           onClose={() => setResolved(null)}
           triggerClass="hidden"

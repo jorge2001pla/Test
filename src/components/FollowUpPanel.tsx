@@ -4,15 +4,8 @@ import TrackingForm from "@/components/TrackingForm";
 import TrackingCheck from "@/components/TrackingCheck";
 import PartySettingsForm, { AddTaskForm } from "@/components/PartySettingsForm";
 import { getProfileView } from "@/lib/followup/profile";
-import { commissionLine, fmtDate, fmtDay, fmtInstant } from "@/lib/followup/present";
+import { fmtDate, fmtDay, fmtInstant } from "@/lib/followup/present";
 import { CHANNEL_LABELS, OUTCOME_LABELS, type Channel, type Outcome } from "@/lib/followup/outcomes";
-
-const TONE: Record<string, string> = {
-  ok: "text-green-700 dark:text-green-400",
-  warn: "text-orange-600 dark:text-orange-400",
-  bad: "text-muted-foreground",
-  muted: "text-muted-foreground",
-};
 
 const CLOSE_LABEL: Record<string, string> = {
   NO_RESPONSE: "closed — no response",
@@ -38,8 +31,7 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
 export default async function FollowUpPanel({ partyId, profilePath }: { partyId: string; profilePath: string }) {
   const v = await getProfileView(partyId);
   if (!v) return null;
-  const { party, commission, cycle } = v;
-  const comm = commissionLine(commission);
+  const { party, cycle } = v;
   const r = party.restrictions;
   const next = v.nextAction;
 
@@ -48,19 +40,14 @@ export default async function FollowUpPanel({ partyId, profilePath }: { partyId:
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-lg font-semibold text-foreground">30-Day Follow-Up</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <LogContactPanel partyId={party.id} name={party.displayName} openingKnown={!!party.openingDate} hasBook={v.hasBook} profilePath={profilePath} showDelivery={v.pending.some((t) => t.category === "DELIVERY")} />
-          <LogContactPanel partyId={party.id} name={party.displayName} mode="sale" openingKnown={!!party.openingDate} hasBook={v.hasBook} profilePath={profilePath} triggerClass="rounded bg-gold px-2.5 py-1 text-xs font-medium text-brand-black hover:opacity-90" />
+          <LogContactPanel partyId={party.id} name={party.displayName} hasBook={v.hasBook} profilePath={profilePath} showDelivery={v.pending.some((t) => t.category === "DELIVERY")} />
+          <LogContactPanel partyId={party.id} name={party.displayName} mode="sale" hasBook={v.hasBook} profilePath={profilePath} triggerClass="rounded bg-gold px-2.5 py-1 text-xs font-medium text-brand-black hover:opacity-90" />
         </div>
       </div>
 
       {(party.ghost || r.doNotContact) && (
         <p className="rounded bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400">
           {party.ghost ? "GHOST — outreach is suppressed." : "Asked to stop all contact — outreach is suppressed."}
-        </p>
-      )}
-      {v.deadlineWarning && (
-        <p className="rounded bg-orange-500/10 px-3 py-2 text-sm text-orange-700 dark:text-orange-400">
-          The 50% window ends on a non-working day — today is the last working day to act in-window.
         </p>
       )}
 
@@ -86,7 +73,6 @@ export default async function FollowUpPanel({ partyId, profilePath }: { partyId:
             <span className="text-muted-foreground">None yet — record a sale to start one</span>
           )}
         </Row>
-        <Row k="50% window"><span className={TONE[comm.tone]}>{comm.text.replace("Commission window: ", "")}</span></Row>
         <Row k="Last contact">
           <span className="text-muted-foreground">attempt {fmtDay(party.lastAttemptAt)} · conversation {fmtDay(party.lastConversationAt)}</span>
         </Row>
@@ -120,8 +106,6 @@ export default async function FollowUpPanel({ partyId, profilePath }: { partyId:
         <summary className="cursor-pointer text-gold hover:underline">More details &amp; settings</summary>
         <div className="mt-3 space-y-4">
           <div className="space-y-1">
-            <Row k="Opening date">{party.openingDate ? fmtDate(party.openingDate) : <span className="text-muted-foreground">unknown</span>}</Row>
-            <Row k="Window ends">{commission.windowEnd ? fmtDate(commission.windowEnd) : "—"} <span className="text-xs text-muted-foreground">(repeat sales never extend it)</span></Row>
             <Row k="Last sale">{party.latestQualifyingSaleDate ? fmtDate(party.latestQualifyingSaleDate) : "—"}</Row>
             <Row k="Their local time">{v.timezone.local}{!v.timezone.known && " (zone unknown — using Eastern)"}{v.timezone.source && ` · ${v.timezone.source}`}</Row>
             <Row k="Interests">{party.interests || <span className="text-muted-foreground">—</span>}</Row>
@@ -146,7 +130,7 @@ export default async function FollowUpPanel({ partyId, profilePath }: { partyId:
                   {v.orders.map((o) => (
                     <li key={o.id} className="text-foreground">
                       {fmtDate(o.sale_date)} · {o.amount != null ? `$${o.amount}` : "—"}
-                      <span className="text-xs text-muted-foreground"> {o.qualifying ? (o.commission_kind ?? "").replace("_", " ").toLowerCase() : "opener-only"}{o.commission_rate ? ` @ ${o.commission_rate * 100}%` : ""}</span>
+                      <span className="text-xs text-muted-foreground"> {o.qualifying ? "" : "opener-only (not counted)"}</span>
                     </li>
                   ))}
                 </ul>

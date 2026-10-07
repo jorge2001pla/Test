@@ -4,14 +4,7 @@ import TaskActions from "@/components/TaskActions";
 import TrackingForm from "@/components/TrackingForm";
 import TrackingCheck from "@/components/TrackingCheck";
 import type { DailyQueue as Queue, QueueRow } from "@/lib/followup/queue";
-import { commissionLine, fmtDate, fmtDay, fmtInstant } from "@/lib/followup/present";
-
-const TONE: Record<string, string> = {
-  ok: "text-green-700 dark:text-green-400",
-  warn: "text-orange-600 dark:text-orange-400",
-  bad: "text-muted-foreground",
-  muted: "text-muted-foreground",
-};
+import { fmtDate, fmtDay, fmtInstant } from "@/lib/followup/present";
 
 function Row({ row }: { row: QueueRow }) {
   const first = row.tasks[0];
@@ -20,10 +13,6 @@ function Row({ row }: { row: QueueRow }) {
   // One quiet status line: only what helps you decide how to work this client right now.
   const facts: React.ReactNode[] = [];
   if (row.cycleDay != null) facts.push(<>Day {Math.min(row.cycleDay, 30)}/30</>);
-  if (row.commission.eligibility === "IN_WINDOW") {
-    const c = commissionLine(row.commission);
-    facts.push(<span className={TONE[c.tone]}>50% window: {row.commission.daysRemaining === 1 ? "last day" : `${row.commission.daysRemaining} days left`}</span>);
-  }
   if (row.lastAttemptAt) facts.push(<>Last called {fmtDay(row.lastAttemptAt)}</>);
   if (row.lastObjection) facts.push(<>Objection: {row.lastObjection}</>);
   const restrictions = [row.noCalls && "no calls", row.noText && "no texts", row.noEmail && "no email"].filter(Boolean).join(", ");
@@ -41,7 +30,6 @@ function Row({ row }: { row: QueueRow }) {
           <p className="mt-0.5 text-sm text-foreground">
             {row.why}
             {first.overdue && <span className="ml-2 rounded bg-red-500/15 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:text-red-400">overdue</span>}
-            {row.deadlineWarning && <span className="ml-2 rounded bg-orange-500/15 px-1.5 py-0.5 text-xs font-medium text-orange-700 dark:text-orange-400">50% window ends on a non-working day — last chance today</span>}
           </p>
           {(facts.length > 0 || restrictions) && (
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -55,7 +43,6 @@ function Row({ row }: { row: QueueRow }) {
           name={row.name}
           defaults={{ taskId: first.id, shipmentId: shipTask?.shipmentId ?? null, purpose: first.purpose }}
           showDelivery={row.tasks.some((t) => t.category === "DELIVERY")}
-          openingKnown={row.commission.eligibility !== "UNKNOWN"}
           hasBook={row.href.startsWith("/book/")}
           profilePath={row.href}
         />
@@ -117,7 +104,7 @@ export default function DailyQueue({
       {queue.sections.filter((s) => s.clients > 0).map((s) => (
         <section key={s.id}>
           <h3 className="flex flex-wrap items-baseline gap-2 font-display text-base font-semibold text-foreground">
-            <span className="text-gold">{s.id}.</span> {s.title}
+            {s.title}
             <span className="text-xs font-normal text-muted-foreground">
               {s.clients} client{s.clients === 1 ? "" : "s"} · {s.tasks} task{s.tasks === 1 ? "" : "s"}
             </span>

@@ -3,7 +3,6 @@ import { listClientsWithLastCallNote, listScheduledCallbacks } from "@/lib/clien
 import {
   listBookClientsWithLastContact,
   listScheduledBookCallbacks,
-  countBookClientsCreatedInRange,
   getBookValueStats,
 } from "@/lib/book";
 import { listActiveShipments } from "@/lib/shipments";
@@ -12,12 +11,9 @@ import { listNotes } from "@/lib/notes";
 import {
   buildFollowUpSections,
   buildWorkTheBookQueue,
-  currentWeekRange,
   localDateString,
   nowET,
-  remainingWorkdays,
   VALUE_TIER_THRESHOLDS,
-  WEEKLY_GOAL,
   WHALE_GOAL_COUNT,
   WHALE_GOAL_VALUE,
 } from "@/lib/business-logic";
@@ -33,6 +29,7 @@ import DailyQueue from "@/components/DailyQueue";
 import { createReminderAction, createNoteAction } from "@/app/actions";
 import { getDailyQueue, getExceptions } from "@/lib/followup/queue";
 import { reconcile } from "@/lib/followup/reconcile";
+import { getSalesStats } from "@/lib/followup/sales-stats";
 import { ensurePartyForBook } from "@/lib/followup/store";
 
 export const dynamic = "force-dynamic";
@@ -79,35 +76,13 @@ export default async function DashboardPage({
 
   const valueStats = await getBookValueStats(VALUE_TIER_THRESHOLDS.whale);
 
-  const weekRange = currentWeekRange(now);
-  const weeklyBookCount = await countBookClientsCreatedInRange(weekRange.start, weekRange.end);
-
-  // Daily trend for now — the book is young, so weekly bars hid the day-to-day movement.
-  const TREND_DAYS = 14;
-  const dayRanges = Array.from({ length: TREND_DAYS }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (TREND_DAYS - 1 - i));
-    const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
-    return {
-      start: `${localDateString(d)}T00:00:00`,
-      end: `${localDateString(next)}T00:00:00`,
-      label:
-        i === TREND_DAYS - 1
-          ? "Today"
-          : d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      range: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
-      isCurrent: i === TREND_DAYS - 1,
-    };
-  });
-  const dayCounts = await Promise.all(
-    dayRanges.map((r) => countBookClientsCreatedInRange(r.start, r.end))
-  );
-  const trendPoints = dayRanges.map((r, i) => ({
-    label: r.label,
-    range: r.range,
-    count: dayCounts[i],
-    isCurrent: r.isCurrent,
+  const sales = await getSalesStats(instant);
+  const trendPoints = sales.trend.map((t, i) => ({
+    label: i === sales.trend.length - 1 ? "Today" : new Date(`${t.date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+    range: new Date(`${t.date}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }),
+    count: t.count,
+    isCurrent: i === sales.trend.length - 1,
   }));
-  const dailyPace = Math.ceil(WEEKLY_GOAL / 5);
 
   const today = localDateString(now);
   const reminders = await listActiveReminders();
@@ -152,15 +127,12 @@ export default async function DashboardPage({
   const nextMonthHref = `/?month=${monthParam(nextMonthDate.getFullYear(), nextMonthDate.getMonth())}`;
   const prevMonthHref = `/?month=${monthParam(prevMonthDate.getFullYear(), prevMonthDate.getMonth())}`;
 
-  const weeklyPct = Math.min(100, Math.round((weeklyBookCount / WEEKLY_GOAL) * 100));
-  const weeklyRemaining = Math.max(0, WEEKLY_GOAL - weeklyBookCount);
-  const workdaysLeft = remainingWorkdays(now, weekRange.end);
+  const todayPct = Math.min(100, Math.round((sales.todayCount / sales.dailyGoal) * 100));
+  const monthPct = Math.min(100, Math.round((sales.monthCount / sales.monthlyGoal) * 100));
   const paceLabel =
-    weeklyRemaining === 0
-      ? "Goal hit for the week."
-      : workdaysLeft === 0
-        ? `${weeklyRemaining} short of goal with no workdays left this week.`
-        : `Need ${weeklyRemaining} more by Wed — about ${Math.ceil(weeklyRemaining / workdaysLeft)}/day.`;
+    sales.monthCount >= sales.monthlyGoal
+      ? "Monthly goal hit."
+      : `Need ${sales.monthlyGoal - sales.monthCount} more this month — about ${sales.neededPerDay}/working day.`;
 
   // Shipments still in progress: not delivered, or delivered but receipt not confirmed, or an open issue.
   const shipmentRows = await Promise.all(
@@ -194,12 +166,12 @@ export default async function DashboardPage({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Weekly goal · {weekRange.label}</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Sales today</p>
           <div className="mt-1 flex items-center gap-3">
-            <p className="text-xl font-semibold text-gold">{weeklyBookCount}<span className="text-sm font-normal text-muted-foreground"> / {WEEKLY_GOAL}</span></p>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-background"><div className="h-full rounded-full bg-gold" style={{ width: `${weeklyPct}%` }} /></div>
+            <p className="text-xl font-semibold text-gold">{sales.todayCount}<span className="text-sm font-normal text-muted-foreground"> / {sales.dailyGoal}</span></p>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-background"><div className="h-full rounded-full bg-gold" style={{ width: `${todayPct}%` }} /></div>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">{paceLabel}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{sales.monthCount} of {sales.monthlyGoal} this month · {paceLabel}</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-3">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Whale Tracker</p>
@@ -405,35 +377,24 @@ export default async function DashboardPage({
       </div>
 
       <details className="rounded-lg border border-border bg-card p-4">
-        <summary className="cursor-pointer font-display text-base font-semibold text-foreground">Weekly goal trend</summary>
+        <summary className="cursor-pointer font-display text-base font-semibold text-foreground">Sales trend — {sales.monthLabel}</summary>
         <div className="mt-3">
-        <div>
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-display text-lg font-semibold text-foreground">Weekly Goal</h2>
-          <span className="text-xs text-muted-foreground">{weekRange.label}</span>
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          New book clients this week — direct sales and 50% conversions both count.
-        </p>
-        <div className="mt-3 flex items-center gap-4">
-          <p className="text-2xl font-semibold text-gold">
-            {weeklyBookCount}
-            <span className="text-sm font-normal text-muted-foreground"> / {WEEKLY_GOAL}</span>
-          </p>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
-            <div className="h-full rounded-full bg-gold" style={{ width: `${weeklyPct}%` }} />
+          <div className="flex items-center gap-4">
+            <p className="text-2xl font-semibold text-gold">
+              {sales.monthCount}
+              <span className="text-sm font-normal text-muted-foreground"> / {sales.monthlyGoal} this month</span>
+            </p>
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
+              <div className="h-full rounded-full bg-gold" style={{ width: `${monthPct}%` }} />
+            </div>
           </div>
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">{paceLabel}</p>
-        <WeeklyTrendChart
-          points={trendPoints}
-          goal={dailyPace}
-          goalLabel={`Daily new-client trend, pace ${dailyPace}/day`}
-          caption={`Dashed line = daily pace (${dailyPace}/day hits the weekly ${WEEKLY_GOAL} across Mon–Fri). Last ${14} days, today highlighted.`}
-        />
-      </div>
-
-
+          <p className="mt-2 text-sm text-muted-foreground">{paceLabel}</p>
+          <WeeklyTrendChart
+            points={trendPoints}
+            goal={sales.dailyGoal}
+            goalLabel={`Daily sales, goal ${sales.dailyGoal}/day`}
+            caption={`Dashed line = daily goal (${sales.dailyGoal}/day). Every sale you record counts. Last 14 days, today highlighted.`}
+          />
         </div>
       </details>
 

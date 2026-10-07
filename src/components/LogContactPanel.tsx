@@ -44,7 +44,6 @@ export default function LogContactPanel({
   mode = "contact",
   defaults = {},
   hasBook = false,
-  openingKnown = true,
   profilePath,
   triggerLabel,
   triggerClass,
@@ -57,7 +56,6 @@ export default function LogContactPanel({
   mode?: "contact" | "sale";
   defaults?: LogDefaults;
   hasBook?: boolean;
-  openingKnown?: boolean;
   profilePath?: string;
   triggerLabel?: string;
   triggerClass?: string;
@@ -95,10 +93,7 @@ export default function LogContactPanel({
   // sale
   const [saleDate, setSaleDate] = useState(etToday());
   const [amount, setAmount] = useState("");
-  const [profit, setProfit] = useState("");
-  const [saleKind, setSaleKind] = useState<"SALE" | "PROMO_OPENER" | "OPENER_ONLY">("SALE");
-  const [firstCall, setFirstCall] = useState(false);
-  const [openingDate, setOpeningDate] = useState("");
+  const [openerOnly, setOpenerOnly] = useState(false);
   const [products, setProducts] = useState("");
   const [carrier, setCarrier] = useState("USPS");
   const [tracking, setTracking] = useState("");
@@ -120,17 +115,14 @@ export default function LogContactPanel({
     keyRef.current = newKey();
     setOutcome(mode === "sale" ? "SOLD" : null);
     setVoicemail(false); setObjection(""); setNextDate(""); setNextNote(""); setPitch(""); setNotes("");
-    setCbTime(""); setAmount(""); setProfit(""); setTracking(""); setSatisfaction("");
+    setCbTime(""); setAmount(""); setTracking(""); setSatisfaction("");
   }
 
   function salePayload(): SalePayload {
     return {
       saleDate,
       amount: amount ? Number(amount) : null,
-      profit: profit ? Number(profit) : null,
-      kind: saleKind,
-      firstCall,
-      openingDate: openingDate || null,
+      kind: openerOnly ? ("OPENER_ONLY" as const) : ("SALE" as const),
       products: products || null,
       notes: notes || null,
       shipment: hasBook && tracking.trim() ? { carrier, trackingLink: tracking, expectedDelivery: expected || null } : null,
@@ -265,34 +257,15 @@ export default function LogContactPanel({
 
                 {showSale && (
                   <div className="space-y-3 rounded border border-border p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sale</p>
-                    <div className="flex flex-col gap-1 text-sm text-foreground">
-                      {([
-                        ["SALE", "My sale (starts a new 30-day cycle)"],
-                        ["PROMO_OPENER", "Promo order — I opened this account"],
-                        ["OPENER_ONLY", "$19.95 promo only — someone else opened (no new cycle)"],
-                      ] as const).map(([k, t]) => (
-                        <label key={k} className="flex items-center gap-2">
-                          <input type="radio" name="saleKind" checked={saleKind === k} onChange={() => setSaleKind(k)} className="accent-gold" /> {t}
-                        </label>
-                      ))}
-                    </div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sale (counts toward your daily and monthly goal)</p>
                     <div className="flex gap-2">
                       <div className="flex-1"><span className={label}>Sale date</span><input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} className={input} /></div>
                       <div className="flex-1"><span className={label}>Amount ($)</span><input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className={input} /></div>
-                      <div className="flex-1"><span className={label}>Profit ($)</span><input type="number" step="0.01" value={profit} onChange={(e) => setProfit(e.target.value)} className={input} /></div>
                     </div>
-                    <label className="flex items-center gap-2 text-sm text-foreground">
-                      <input type="checkbox" checked={firstCall} onChange={(e) => setFirstCall(e.target.checked)} className="h-4 w-4 accent-gold" />
-                      Closed on the first call (70% deal)
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <input type="checkbox" checked={openerOnly} onChange={(e) => setOpenerOnly(e.target.checked)} className="h-4 w-4 accent-gold" />
+                      This is only the opener’s $19.95 promo — not my sale (doesn’t count, no new cycle)
                     </label>
-                    {!openingKnown && saleKind !== "PROMO_OPENER" && (
-                      <div>
-                        <span className={label}>Original opening date (when the Morgan promo order entered the company system)</span>
-                        <input type="date" value={openingDate} onChange={(e) => setOpeningDate(e.target.value)} className={input} />
-                        <p className="mt-1 text-xs text-muted-foreground">Unknown? Leave blank — commission eligibility will show “unknown” instead of guessing.</p>
-                      </div>
-                    )}
                     <div><span className={label}>Products / interests (optional)</span><input value={products} onChange={(e) => setProducts(e.target.value)} className={input} /></div>
                     {hasBook && (
                       <div className="space-y-2">

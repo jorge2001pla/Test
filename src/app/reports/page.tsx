@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getReport } from "@/lib/followup/admin";
+import { getSalesStats } from "@/lib/followup/sales-stats";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default async function ReportsPage() {
   const r = await getReport();
+  const sales = await getSalesStats(new Date());
   return (
     <div className="space-y-6">
       <Link href="/" className="text-sm text-muted-foreground hover:text-gold">← Back to Dashboard</Link>
@@ -37,8 +39,8 @@ export default async function ReportsPage() {
         {r.closedByReason.length === 0 ? <p className="text-sm text-muted-foreground">None yet.</p> : <ul className="text-sm text-foreground">{r.closedByReason.map((c) => <li key={c.reason}>{c.reason.replaceAll("_", " ").toLowerCase()}: {c.count}</li>)}</ul>}
       </section>
       <section>
-        <h2 className="font-display text-lg font-semibold text-foreground">This month’s sales by commission tier</h2>
-        {r.commissionByKind.length === 0 ? <p className="text-sm text-muted-foreground">No sales recorded this month.</p> : <ul className="text-sm text-foreground">{r.commissionByKind.map((c) => <li key={c.kind}>{c.kind.replaceAll("_", " ").toLowerCase()}: {c.count} sales, ${c.amount.toLocaleString()}</li>)}</ul>}
+        <h2 className="font-display text-lg font-semibold text-foreground">Sales</h2>
+        <p className="text-sm text-foreground">Today: {sales.todayCount} / {sales.dailyGoal} · {sales.monthLabel}: {sales.monthCount} / {sales.monthlyGoal}</p>
       </section>
     </div>
   );

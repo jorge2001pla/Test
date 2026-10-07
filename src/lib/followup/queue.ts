@@ -16,9 +16,8 @@ export const SECTION_TITLES: Record<number, string> = {
   1: "Promised callbacks",
   2: "Delivered — check in with the client",
   3: "Shipments & service issues",
-  4: "Follow-ups — inside the 50% window",
-  5: "Other 30-day follow-ups",
-  6: "Reactivation",
+  4: "30-day follow-ups",
+  5: "Reactivation",
 };
 
 export interface QueueTask {
@@ -85,14 +84,14 @@ export interface DailyQueue {
   upcomingCallbacks: { partyId: string; name: string; href: string; dueAt: string; purpose: string; taskId: string }[];
 }
 
-function taskSection(t: TaskRow, inWindow: boolean): number {
+function taskSection(t: TaskRow): number {
   switch (t.category) {
     case "CALLBACK": return 1;
     case "DELIVERY": return 2;
     case "SHIPMENT":
     case "SERVICE": return 3;
-    case "REACTIVATION": return 6;
-    default: return inWindow ? 4 : 5; // CADENCE, MANUAL
+    case "REACTIVATION": return 5;
+    default: return 4; // CADENCE, MANUAL
   }
 }
 
@@ -140,12 +139,11 @@ export async function getDailyQueue(
     const p = parties.get(partyId);
     if (!p) continue;
     const comm = commissionStatus(p.openingDate, today);
-    const inWindow = comm.eligibility === "IN_WINDOW";
     const qts: QueueTask[] = list.map((t) => ({
       id: t.id, category: t.category, type: t.type, purpose: t.purpose, dueDate: t.due_date, dueAt: t.due_at,
       overdue: t.due_at ? new Date(t.due_at).getTime() < now.getTime() - cfg.callbackGraceMinutes * 60_000 : t.due_date < today,
       cadenceDay: t.cadence_day, voicemail: !!t.voicemail, textStep: !!t.text_step, differentPeriod: !!t.different_period,
-      shipmentId: t.shipment_id, orderId: t.order_id, detail: t.detail, section: taskSection(t, inWindow),
+      shipmentId: t.shipment_id, orderId: t.order_id, detail: t.detail, section: taskSection(t),
     })).sort((a, b) => a.section - b.section || a.dueDate.localeCompare(b.dueDate));
     const section = qts[0].section;
     const { tz, known } = partyZone(p, cfg);
@@ -176,12 +174,11 @@ export async function getDailyQueue(
     });
   }
 
-  // Urgency inside a section: overdue first (oldest due), then fewest commission-window days.
+  // Urgency inside a section: overdue first (oldest due), then by name.
   rows.sort((a, b) =>
     a.section - b.section ||
     Number(b.tasks[0].overdue) - Number(a.tasks[0].overdue) ||
     a.tasks[0].dueDate.localeCompare(b.tasks[0].dueDate) ||
-    (a.commission.daysRemaining ?? 99) - (b.commission.daysRemaining ?? 99) ||
     a.name.localeCompare(b.name)
   );
 
@@ -192,7 +189,7 @@ export async function getDailyQueue(
   // Hrefs only for the visible page (one lookup each).
   for (const r of slice) r.href = (await getLinks(r.partyId)).href;
 
-  const sections: QueueSection[] = [1, 2, 3, 4, 5, 6].map((id) => {
+  const sections: QueueSection[] = [1, 2, 3, 4, 5].map((id) => {
     const all = rows.filter((r) => r.section === id);
     return {
       id,

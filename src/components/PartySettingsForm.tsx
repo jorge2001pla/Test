@@ -47,7 +47,7 @@ export default function PartySettingsForm({
     startTransition(async () => {
       const r = await updatePartyAction(
         partyId,
-        { openingDate: v.openingDate || null, timezone: v.timezone || null, interests: v.interests, restrictions: v.restrictions, pauseReason: v.pauseReason, pauseUntil: v.pauseUntil || null },
+        { timezone: v.timezone || null, interests: v.interests, restrictions: v.restrictions, pauseReason: v.pauseReason, pauseUntil: v.pauseUntil || null },
         profilePath
       );
       setMsg(r.ok ? "Saved." : r.error ?? "Failed.");
@@ -63,10 +63,6 @@ export default function PartySettingsForm({
       {open && (
         <div className="mt-3 space-y-3 rounded border border-border p-3">
           <div className="flex flex-wrap gap-3">
-            <div>
-              <span className={lbl}>Original opening date (Morgan promo order entered)</span>
-              <input type="date" value={v.openingDate} onChange={(e) => setV({ ...v, openingDate: e.target.value })} className={input} />
-            </div>
             <div>
               <span className={lbl}>Client time zone</span>
               <select value={v.timezone} onChange={(e) => setV({ ...v, timezone: e.target.value })} className={input}>
