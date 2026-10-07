@@ -12,6 +12,7 @@ import {
   closeTask,
   getConfig,
   ensureBookClient,
+  trackingCheckTask,
   getLinks,
   getParty,
   insertTask,
@@ -185,6 +186,7 @@ export async function recordSale(input: RecordSaleInput): Promise<RecordSaleResu
         partyId: party.id, orderId, shipmentId: shipId, category: "SHIPMENT", type: "CALL",
         purpose: "Call: your order has shipped", dueDate: due, dedupeKey: `shipcall:${shipId}`,
       }, now).stmts);
+      stmts.push(...trackingCheckTask({ partyId: party.id, orderId, shipmentId: shipId, carrier: input.shipment.carrier, trackingLink: input.shipment.trackingLink, expectedDelivery: input.shipment.expectedDelivery }, cfg, now));
       tasksCreated++;
     } else {
       stmts.push(...insertTask({

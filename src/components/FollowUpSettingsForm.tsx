@@ -64,6 +64,7 @@ export default function FollowUpSettingsForm({ initial }: { initial: FollowUpCon
           <label>Calling starts (client local)<br /><input type="time" value={cfg.callingStart} onChange={(e) => setCfg({ ...cfg, callingStart: e.target.value })} className={input} /></label>
           <label>Calling ends<br /><input type="time" value={cfg.callingEnd} onChange={(e) => setCfg({ ...cfg, callingEnd: e.target.value })} className={input} /></label>
           <label>Callback heads-up (minutes before)<br /><input type="number" min={0} value={cfg.callbackLeadMinutes} onChange={(e) => setCfg({ ...cfg, callbackLeadMinutes: Number(e.target.value) })} className={`${input} w-24`} /></label>
+          <label>“Has it been delivered?” reminder (days after tracking)<br /><input type="number" min={1} max={30} value={cfg.trackingCheckDays} onChange={(e) => setCfg({ ...cfg, trackingCheckDays: Number(e.target.value) })} className={`${input} w-24`} /></label>
           <label>Overdue after (minutes)<br /><input type="number" min={0} value={cfg.callbackGraceMinutes} onChange={(e) => setCfg({ ...cfg, callbackGraceMinutes: Number(e.target.value) })} className={`${input} w-24`} /></label>
         </div>
         <label className="block text-sm">Holidays / days off (one YYYY-MM-DD per line)<br />

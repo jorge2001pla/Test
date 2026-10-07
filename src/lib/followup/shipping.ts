@@ -8,6 +8,7 @@ import { uuid } from "./store";
 import { afterChange } from "./tasks";
 import {
   closeTask,
+  trackingCheckTask,
   ensureBookClient,
   ensurePartyForBook,
   getConfig,
@@ -80,6 +81,8 @@ export async function onShipmentCreated(shipmentId: string, now: Date = new Date
     partyId, orderId, shipmentId, category: "SHIPMENT", type: "CALL", purpose: "Call: your order has shipped",
     dueDate: nextWorkdayOnOrAfter(today, cfg), dedupeKey: `shipcall:${shipmentId}`,
   }, now).stmts);
+  const sh = (await q<{ carrier: string; tracking_link: string; expected_delivery: string | null }>("SELECT carrier, tracking_link, expected_delivery FROM shipments WHERE id = ?", [shipmentId]))[0];
+  if (sh) await run(trackingCheckTask({ partyId, orderId, shipmentId, carrier: sh.carrier, trackingLink: sh.tracking_link, expectedDelivery: sh.expected_delivery }, cfg, now));
   await afterChange(partyId, now);
 }
 
@@ -122,6 +125,8 @@ export async function recordDelivery(shipmentId: string, deliveredDate?: DateStr
   const stmts: Stmt[] = [
     { sql: "UPDATE shipments SET delivered_at = ?, delivered_date = ?, party_id = COALESCE(party_id, ?), updated_at = ? WHERE id = ?",
       args: [naive, date, partyId, naive, shipmentId] },
+    ...(await q<{ id: string }>("SELECT id FROM fu_tasks WHERE dedupe_key = ? AND status = 'PENDING'", [`track:${shipmentId}`]))
+      .flatMap((t) => closeTask(t.id, "COMPLETED", "Marked delivered", now)),
     ...(existing.length ? [] : insertTask({
       partyId, orderId: s.order_id, shipmentId, category: "DELIVERY", type: "CALL",
       purpose: "Delivery check-in: confirm receipt & satisfaction",
@@ -212,6 +217,7 @@ export async function addTrackingToOrder(orderId: string, t: TrackingInput, now:
     partyId: o.party_id, orderId, shipmentId: sid, category: "SHIPMENT", type: "CALL", purpose: "Call: your order has shipped",
     dueDate: nextWorkdayOnOrAfter(today, cfg), dedupeKey: `shipcall:${sid}`,
   }, now).stmts);
+  stmts.push(...trackingCheckTask({ partyId: o.party_id, orderId, shipmentId: sid, carrier: t.carrier || "Other", trackingLink: t.trackingLink.trim(), expectedDelivery: t.expectedDelivery }, cfg, now));
   await run(stmts);
   await afterChange(o.party_id, now);
   return { ok: true };

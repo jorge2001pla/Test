@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import db, { ready } from "../db";
 import { DEFAULT_CONFIG, parseConfig, parseRestrictions, type FollowUpConfig, type Restrictions } from "./config";
-import { addDays, etDate, inferTimezoneFromPhone, type DateStr } from "./dates";
+import { addDays, etDate, inferTimezoneFromPhone, nextWorkdayOnOrAfter, type DateStr } from "./dates";
 
 export type Arg = string | number | null;
 export interface Stmt {
@@ -424,4 +424,27 @@ export async function ensureBookClient(partyId: string): Promise<string | null> 
   await run(stmts);
   const after = await q<{ id: string }>("SELECT id FROM book_clients WHERE party_id = ? LIMIT 1", [partyId]);
   return after[0]?.id ?? null;
+}
+
+/** The “has it been delivered yet?” reminder for a shipment: due on the expected delivery date if
+ * one was given, otherwise N days after tracking was added. A manual stand-in for carrier
+ * notifications — it stays in the queue until the delivery is marked (or you complete it). */
+export function trackingCheckTask(
+  p: { partyId: string; orderId?: string | null; shipmentId: string; carrier: string; trackingLink: string; expectedDelivery?: DateStr | null },
+  cfg: FollowUpConfig,
+  now: Date
+): Stmt[] {
+  const today = etDate(now);
+  const due =
+    p.expectedDelivery && p.expectedDelivery >= today
+      ? nextWorkdayOnOrAfter(p.expectedDelivery, cfg)
+      : nextWorkdayOnOrAfter(addDays(today, cfg.trackingCheckDays), cfg);
+  return insertTask(
+    {
+      partyId: p.partyId, orderId: p.orderId ?? null, shipmentId: p.shipmentId, category: "SHIPMENT", type: "TASK",
+      purpose: `Check ${p.carrier} tracking — has it been delivered?`, dueDate: due,
+      dedupeKey: `track:${p.shipmentId}`, detail: p.trackingLink,
+    },
+    now
+  ).stmts;
 }

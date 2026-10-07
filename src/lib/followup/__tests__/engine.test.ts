@@ -265,7 +265,7 @@ describe("tracking added after the sale", () => {
     expect((await q("SELECT 1 FROM fu_orders WHERE party_id = ?", [partyId])).length).toBe(1);
     expect((await q("SELECT 1 FROM shipments WHERE order_id = ?", [sale.orderId!])).length).toBe(1);
     const t = await pending(partyId, "SHIPMENT");
-    expect(t.map((x) => x.purpose)).toEqual(["Call: your order has shipped"]);
+    expect(t.map((x) => x.purpose).sort()).toEqual(["Call: your order has shipped", "Check USPS tracking — has it been delivered?"]);
     const ltv = await q<{ lifetime_value: number }>("SELECT lifetime_value FROM book_clients WHERE id = ?", [bookId]);
     expect(Number(ltv[0].lifetime_value)).toBe(800);
   });
@@ -310,5 +310,21 @@ describe("shipping update call", () => {
     expect(r.ok).toBe(true);
     expect((await pending(partyId, "SHIPMENT")).some((t) => t.purpose.includes("has shipped"))).toBe(false);
     expect((await q<{ shipped_call_done: number }>("SELECT shipped_call_done FROM shipments WHERE id = ?", [sid]))[0].shipped_call_done).toBe(1);
+  });
+});
+
+describe("tracking check reminder", () => {
+  it("is created when tracking is added, due ~4 days later, and closed when delivery is marked", async () => {
+    const { partyId } = await book("TrackCheck");
+    const sale = await recordSale({ partyId, saleDate: "2026-10-07", amount: 200, idemKey: key(), now: NOW });
+    const { addTrackingToOrder } = await import("../shipping");
+    await addTrackingToOrder(sale.orderId!, { carrier: "FedEx", trackingLink: "https://fedex/1" }, NOW);
+    const t = await q<{ id: string; due_date: string; purpose: string; detail: string }>("SELECT * FROM fu_tasks WHERE party_id = ? AND dedupe_key LIKE 'track:%' AND status='PENDING'", [partyId]);
+    expect(t).toHaveLength(1);
+    expect(t[0].due_date).toBe("2026-10-12"); // Wed + 4 = Sun → next workday Mon
+    expect(t[0].detail).toBe("https://fedex/1");
+    const sid = (await q<{ id: string }>("SELECT id FROM shipments WHERE order_id = ?", [sale.orderId!]))[0].id;
+    await recordDelivery(sid, "2026-10-12", at("2026-10-12T15:00:00Z"));
+    expect((await q("SELECT 1 FROM fu_tasks WHERE party_id = ? AND dedupe_key LIKE 'track:%' AND status='PENDING'", [partyId])).length).toBe(0);
   });
 });

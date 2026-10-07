@@ -1,6 +1,7 @@
 import LogContactPanel from "@/components/LogContactPanel";
 import TaskActions from "@/components/TaskActions";
 import TrackingForm from "@/components/TrackingForm";
+import TrackingCheck from "@/components/TrackingCheck";
 import PartySettingsForm, { AddTaskForm } from "@/components/PartySettingsForm";
 import { getProfileView } from "@/lib/followup/profile";
 import { commissionLine, fmtDate, fmtDay, fmtInstant } from "@/lib/followup/present";
@@ -103,7 +104,8 @@ export default async function FollowUpPanel({ partyId, profilePath }: { partyId:
                 </span>
               </div>
               <div className="space-y-1">
-                {t.category === "SHIPMENT" && t.type === "TASK" && t.order_id && <TrackingForm orderId={t.order_id} profilePath={profilePath} />}
+                {t.category === "SHIPMENT" && t.type === "TASK" && !t.shipment_id && t.order_id && <TrackingForm orderId={t.order_id} profilePath={profilePath} />}
+                {t.category === "SHIPMENT" && t.type === "TASK" && t.shipment_id && <TrackingCheck shipmentId={t.shipment_id} trackingLink={t.detail} profilePath={profilePath} />}
                 <TaskActions taskId={t.id} timed={t.category === "CALLBACK"} />
               </div>
             </li>
