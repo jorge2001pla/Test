@@ -19,6 +19,7 @@ export const OUTCOMES = [
   "NO_ANSWER",
   "AI_SCREENING",
   "SPOKE",
+  "SHIPPING_UPDATE",
   "CALLBACK_SET",
   "DECLINED",
   "SOLD",
@@ -34,6 +35,7 @@ export const OUTCOME_LABELS: Record<Outcome, string> = {
   NO_ANSWER: "No answer",
   AI_SCREENING: "AI screening / blocked",
   SPOKE: "Spoke — no result yet",
+  SHIPPING_UPDATE: "Gave shipping update",
   CALLBACK_SET: "Callback requested",
   DECLINED: "Declined",
   SOLD: "Sold",
@@ -74,6 +76,8 @@ export function traits(outcome: Outcome, channel: Channel): OutcomeTraits {
       return t({ legacyStatus: call ? "NOT_AVAILABLE" : null });
     case "SPOKE":
       return t({ reached: true, legacyStatus: "NO_DISPO", needsNextDate: true });
+    case "SHIPPING_UPDATE":
+      return t({ reached: true, legacyStatus: null });
     case "CALLBACK_SET":
       return t({ reached: true, legacyStatus: "CALLBACK", needsCallbackTime: true });
     case "DECLINED":

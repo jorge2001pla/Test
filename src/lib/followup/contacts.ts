@@ -188,7 +188,13 @@ export async function logContact(input: LogContactInput): Promise<LogContactResu
       done(t, `Text sent`);
       continue;
     }
-    if (!call) continue; // texts/emails only satisfy text steps (handled above)
+    // A text/email shipping update also satisfies the "your order has shipped" step.
+    if (!call && input.outcome === "SHIPPING_UPDATE" && t.category === "SHIPMENT" && t.type === "CALL" && (isLinked(t) || t.due_date <= today)) {
+      done(t, `Shipped update: ${label}`);
+      if (t.shipment_id) stmts.push({ sql: "UPDATE shipments SET shipped_call_done = 1, updated_at = datetime('now') WHERE id = ?", args: [t.shipment_id] });
+      continue;
+    }
+    if (!call) continue; // other texts/emails only satisfy text steps (handled above)
 
     if (t.category === "CALLBACK" && (isLinked(t) || dueNow(t))) {
       if (tr.reached) done(t, `Callback reached: ${label}`);

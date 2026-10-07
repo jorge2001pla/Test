@@ -296,3 +296,19 @@ describe("sales put the client in the book", () => {
     expect((await q("SELECT 1 FROM book_clients WHERE party_id = ?", [partyId])).length).toBe(0);
   });
 });
+
+describe("shipping update call", () => {
+  it("one tap completes the shipped call without needing a next-action date; a no-answer does not", async () => {
+    const { partyId, bookId } = await book("ShipUpdate");
+    await recordSale({ partyId, saleDate: "2026-10-07", amount: 300, idemKey: key(), now: NOW });
+    const sid = `s${++n}`;
+    await db.execute({ sql: "INSERT INTO shipments (id, book_client_id, carrier, tracking_link, sale_amount) VALUES (?,?,?,?,?)", args: [sid, bookId, "USPS", "http://t", 300] });
+    await onShipmentCreated(sid, NOW);
+    await logContact({ partyId, channel: "DIALER_CALL", outcome: "NO_ANSWER", idemKey: key(), now: NOW });
+    expect((await pending(partyId, "SHIPMENT")).some((t) => t.purpose.includes("has shipped"))).toBe(true);
+    const r = await logContact({ partyId, channel: "DIALER_CALL", outcome: "SHIPPING_UPDATE", idemKey: key(), now: at("2026-10-08T15:00:00Z") });
+    expect(r.ok).toBe(true);
+    expect((await pending(partyId, "SHIPMENT")).some((t) => t.purpose.includes("has shipped"))).toBe(false);
+    expect((await q<{ shipped_call_done: number }>("SELECT shipped_call_done FROM shipments WHERE id = ?", [sid]))[0].shipped_call_done).toBe(1);
+  });
+});

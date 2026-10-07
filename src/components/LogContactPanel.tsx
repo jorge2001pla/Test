@@ -10,8 +10,8 @@ const input =
   "w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:border-gold focus:outline-none";
 const label = "mb-1 block text-xs font-medium text-muted-foreground";
 
-const CALL_OUTCOMES: Outcome[] = ["NO_ANSWER", "AI_SCREENING", "SPOKE", "CALLBACK_SET", "DECLINED", "SOLD", "STOP_CONTACT", "GHOST"];
-const MSG_OUTCOMES: Outcome[] = ["SENT", "REPLIED", "STOP_CONTACT"];
+const CALL_OUTCOMES: Outcome[] = ["NO_ANSWER", "AI_SCREENING", "SHIPPING_UPDATE", "SPOKE", "CALLBACK_SET", "DECLINED", "SOLD", "STOP_CONTACT", "GHOST"];
+const MSG_OUTCOMES: Outcome[] = ["SENT", "SHIPPING_UPDATE", "REPLIED", "STOP_CONTACT"];
 
 const OUTCOME_STYLE: Partial<Record<Outcome, string>> = {
   NO_ANSWER: "border-yellow-500/60 text-yellow-700 dark:text-yellow-400",
@@ -20,6 +20,7 @@ const OUTCOME_STYLE: Partial<Record<Outcome, string>> = {
   DECLINED: "border-red-500/60 text-red-700 dark:text-red-400",
   SOLD: "border-green-600/60 text-green-700 dark:text-green-400",
   DELIVERY_CONFIRMED: "border-green-600/60 text-green-700 dark:text-green-400",
+  SHIPPING_UPDATE: "border-green-600/60 text-green-700 dark:text-green-400",
   GHOST: "border-border text-muted-foreground",
 };
 
@@ -78,7 +79,9 @@ export default function LogContactPanel({
   const keyRef = useRef(newKey());
 
   const [channel, setChannel] = useState<Channel>(defaults.channel ?? "DIALER_CALL");
-  const [outcome, setOutcome] = useState<Outcome | null>(mode === "sale" ? "SOLD" : null);
+  const [outcome, setOutcome] = useState<Outcome | null>(
+    mode === "sale" ? "SOLD" : /order has shipped/i.test(defaults.purpose ?? "") ? "SHIPPING_UPDATE" : null
+  );
   const [voicemail, setVoicemail] = useState(false);
   const [cbDate, setCbDate] = useState(etToday());
   const [cbTime, setCbTime] = useState("");
