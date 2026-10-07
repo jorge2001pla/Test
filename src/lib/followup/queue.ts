@@ -34,6 +34,7 @@ export interface QueueTask {
   textStep: boolean;
   differentPeriod: boolean;
   shipmentId: string | null;
+  orderId: string | null;
   section: number;
 }
 
@@ -143,7 +144,7 @@ export async function getDailyQueue(
       id: t.id, category: t.category, type: t.type, purpose: t.purpose, dueDate: t.due_date, dueAt: t.due_at,
       overdue: t.due_at ? new Date(t.due_at).getTime() < now.getTime() - cfg.callbackGraceMinutes * 60_000 : t.due_date < today,
       cadenceDay: t.cadence_day, voicemail: !!t.voicemail, textStep: !!t.text_step, differentPeriod: !!t.different_period,
-      shipmentId: t.shipment_id, section: taskSection(t, inWindow),
+      shipmentId: t.shipment_id, orderId: t.order_id, section: taskSection(t, inWindow),
     })).sort((a, b) => a.section - b.section || a.dueDate.localeCompare(b.dueDate));
     const section = qts[0].section;
     const { tz, known } = partyZone(p, cfg);

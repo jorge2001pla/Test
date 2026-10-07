@@ -4,6 +4,7 @@
  */
 import { etDate, isDateStr, isWithinCallingHours, nextAllowedSlot, nextWorkdayOnOrAfter, utcToNaiveEtSec, type DateStr } from "./dates";
 import { recordSale } from "./sales";
+import { uuid } from "./store";
 import { afterChange } from "./tasks";
 import {
   closeTask,
@@ -43,11 +44,10 @@ export async function onShipmentCreated(shipmentId: string, now: Date = new Date
   if (!orderId) {
     // Attach to the newest unshipped order from the last 14 days (same amount when priced).
     const open = await q<{ id: string }>(
-      `SELECT o.id FROM fu_orders o WHERE o.party_id = ? AND o.qualifying = 1 AND o.sale_date >= date(?, '-14 day')
+      `SELECT o.id FROM fu_orders o WHERE o.party_id = ? AND o.qualifying = 1 AND o.sale_date >= date(?, '-30 day')
          AND NOT EXISTS (SELECT 1 FROM shipments sh WHERE sh.order_id = o.id)
-         AND (? IS NULL OR o.amount IS NULL OR o.amount = ?)
-       ORDER BY o.sale_date DESC LIMIT 1`,
-      [partyId, today, s.sale_amount, s.sale_amount]
+       ORDER BY (o.amount IS NOT NULL AND o.amount = ?) DESC, o.sale_date DESC LIMIT 1`,
+      [partyId, today, s.sale_amount ?? -1]
     );
     if (open.length) orderId = open[0].id;
   }
@@ -168,4 +168,49 @@ export async function updateShipmentExpected(shipmentId: string, expected: DateS
   if (expected && !isDateStr(expected)) return "Invalid date.";
   await run([{ sql: "UPDATE shipments SET expected_delivery = ? WHERE id = ?", args: [expected, shipmentId] }]);
   return null;
+}
+
+export interface TrackingInput {
+  carrier: string;
+  trackingLink: string;
+  expectedDelivery?: DateStr | null;
+  notes?: string | null;
+}
+
+/** Adds tracking to a sale that was recorded earlier (tracking usually exists 1–2 days later).
+ * Attaches to the EXISTING order — never creates a second order — completes the "enter
+ * shipment" task and queues the "shipped" call. Idempotent per order. */
+export async function addTrackingToOrder(orderId: string, t: TrackingInput, now: Date = new Date()): Promise<{ ok: boolean; error?: string }> {
+  if (!t.trackingLink.trim()) return { ok: false, error: "Paste the tracking link." };
+  if (t.expectedDelivery && !isDateStr(t.expectedDelivery)) return { ok: false, error: "Invalid expected delivery date." };
+  const o = (await q<{ id: string; party_id: string; amount: number | null }>("SELECT id, party_id, amount FROM fu_orders WHERE id = ?", [orderId]))[0];
+  if (!o) return { ok: false, error: "Sale not found." };
+  const already = await q("SELECT 1 FROM shipments WHERE order_id = ? AND tracking_link = ? LIMIT 1", [orderId, t.trackingLink.trim()]);
+  if (already.length) return { ok: true };
+  const book = (await q<{ id: string }>("SELECT id FROM book_clients WHERE party_id = ? ORDER BY created_at LIMIT 1", [o.party_id]))[0];
+  if (!book) return { ok: false, error: "Add this client to your book first (button on their profile), then add the tracking." };
+  const cfg = await getConfig();
+  const today = etDate(now);
+  const sid = uuid();
+  const naive = utcToNaiveEtSec(now);
+  const stmts: Stmt[] = [
+    {
+      sql: `INSERT INTO shipments (id, book_client_id, carrier, tracking_link, notes, sale_amount, shipped_at, created_at, updated_at,
+              party_id, order_id, expected_delivery) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      args: [sid, book.id, t.carrier || "Other", t.trackingLink.trim(), t.notes ?? null, o.amount, naive, naive, naive, o.party_id, orderId, t.expectedDelivery ?? null],
+    },
+  ];
+  if (o.amount) {
+    stmts.push({ sql: "UPDATE book_clients SET lifetime_value = lifetime_value + ?, updated_at = datetime('now') WHERE id = ?", args: [o.amount, book.id] });
+  }
+  for (const task of await q<{ id: string }>("SELECT id FROM fu_tasks WHERE dedupe_key = ? AND status = 'PENDING'", [`shipinfo:${orderId}`])) {
+    stmts.push(...closeTask(task.id, "COMPLETED", "Tracking added", now));
+  }
+  stmts.push(...insertTask({
+    partyId: o.party_id, orderId, shipmentId: sid, category: "SHIPMENT", type: "CALL", purpose: "Call: your order has shipped",
+    dueDate: nextWorkdayOnOrAfter(today, cfg), dedupeKey: `shipcall:${sid}`,
+  }, now).stmts);
+  await run(stmts);
+  await afterChange(o.party_id, now);
+  return { ok: true };
 }

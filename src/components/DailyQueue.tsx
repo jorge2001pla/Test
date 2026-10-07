@@ -1,6 +1,7 @@
 import Link from "next/link";
 import LogContactPanel from "@/components/LogContactPanel";
 import TaskActions from "@/components/TaskActions";
+import TrackingForm from "@/components/TrackingForm";
 import type { DailyQueue as Queue, QueueRow } from "@/lib/followup/queue";
 import { commissionLine, fmtDate, fmtDay, fmtInstant } from "@/lib/followup/present";
 
@@ -91,7 +92,10 @@ function Row({ row }: { row: QueueRow }) {
                 due {t.dueAt ? fmtInstant(t.dueAt) : fmtDate(t.dueDate)}
               </span>
             </div>
-            <TaskActions taskId={t.id} timed={t.category === "CALLBACK"} />
+            <div className="space-y-1">
+              {t.category === "SHIPMENT" && t.type === "TASK" && t.orderId && <TrackingForm orderId={t.orderId} profilePath={row.href} />}
+              <TaskActions taskId={t.id} timed={t.category === "CALLBACK"} />
+            </div>
           </li>
         ))}
       </ul>

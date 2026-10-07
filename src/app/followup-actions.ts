@@ -8,7 +8,7 @@ import { isDateStr, zonedToUtc, ET } from "@/lib/followup/dates";
 import { OUTCOMES, CHANNELS, type Channel, type Outcome } from "@/lib/followup/outcomes";
 import { reconcile } from "@/lib/followup/reconcile";
 import { recordSale, type SaleKind } from "@/lib/followup/sales";
-import { recordDelivery, recordShipmentException, resolveShipmentException } from "@/lib/followup/shipping";
+import { addTrackingToOrder, recordDelivery, recordShipmentException, resolveShipmentException } from "@/lib/followup/shipping";
 import { ensurePartyForBook, ensurePartyForClient, getConfig, getLinks, getParty, iso, resolvePartyId, run, saveConfig } from "@/lib/followup/store";
 import { addManualTask, cancelTask, completeTask, rescheduleTaskTo, afterChange } from "@/lib/followup/tasks";
 
@@ -179,6 +179,12 @@ export async function recordDeliveryAction(shipmentId: string, date: string | nu
       ? "Delivered. The check-in call is outside calling hours, so it is scheduled for the next allowed slot (still visible today)."
       : "Delivered. A check-in call is due now.",
   };
+}
+
+export async function addTrackingAction(orderId: string, carrier: string, trackingLink: string, expectedDelivery: string | null, profilePath?: string): Promise<ActionResult> {
+  const r = await addTrackingToOrder(orderId, { carrier, trackingLink, expectedDelivery: expectedDelivery || null });
+  refresh(profilePath ?? "");
+  return r.ok ? { ok: true, message: "Tracking added to the sale. A “shipped” call is queued." } : { ok: false, error: r.error };
 }
 
 export async function shipmentExceptionAction(shipmentId: string, text: string, profilePath?: string): Promise<ActionResult> {

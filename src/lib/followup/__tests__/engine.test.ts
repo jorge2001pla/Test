@@ -252,3 +252,21 @@ describe("migration safety", () => {
     expect((await getParty(a!))!.openingDate).toBe("2026-10-01");
   });
 });
+
+describe("tracking added after the sale", () => {
+  it("attaches to the existing order, completes the enter-shipment task and queues the shipped call, once", async () => {
+    const { partyId, bookId } = await book("LateTracking");
+    const sale = await recordSale({ partyId, saleDate: "2026-10-06", amount: 800, idemKey: key(), now: at("2026-10-06T15:00:00Z") });
+    expect((await pending(partyId, "SHIPMENT")).map((t) => t.purpose)).toEqual(["Enter shipment / tracking for this sale"]);
+    const { addTrackingToOrder } = await import("../shipping");
+    const r = await addTrackingToOrder(sale.orderId!, { carrier: "USPS", trackingLink: "https://t/1" }, NOW);
+    expect(r.ok).toBe(true);
+    await addTrackingToOrder(sale.orderId!, { carrier: "USPS", trackingLink: "https://t/1" }, NOW); // double submit
+    expect((await q("SELECT 1 FROM fu_orders WHERE party_id = ?", [partyId])).length).toBe(1);
+    expect((await q("SELECT 1 FROM shipments WHERE order_id = ?", [sale.orderId!])).length).toBe(1);
+    const t = await pending(partyId, "SHIPMENT");
+    expect(t.map((x) => x.purpose)).toEqual(["Call: your order has shipped"]);
+    const ltv = await q<{ lifetime_value: number }>("SELECT lifetime_value FROM book_clients WHERE id = ?", [bookId]);
+    expect(Number(ltv[0].lifetime_value)).toBe(800);
+  });
+});
