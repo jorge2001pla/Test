@@ -8,6 +8,7 @@ import { uuid } from "./store";
 import { afterChange } from "./tasks";
 import {
   closeTask,
+  ensureBookClient,
   ensurePartyForBook,
   getConfig,
   getParty,
@@ -187,8 +188,9 @@ export async function addTrackingToOrder(orderId: string, t: TrackingInput, now:
   if (!o) return { ok: false, error: "Sale not found." };
   const already = await q("SELECT 1 FROM shipments WHERE order_id = ? AND tracking_link = ? LIMIT 1", [orderId, t.trackingLink.trim()]);
   if (already.length) return { ok: true };
-  const book = (await q<{ id: string }>("SELECT id FROM book_clients WHERE party_id = ? ORDER BY created_at LIMIT 1", [o.party_id]))[0];
-  if (!book) return { ok: false, error: "Add this client to your book first (button on their profile), then add the tracking." };
+  const bookId = await ensureBookClient(o.party_id);
+  if (!bookId) return { ok: false, error: "Couldn’t find a name for this client to add them to your book." };
+  const book = { id: bookId };
   const cfg = await getConfig();
   const today = etDate(now);
   const sid = uuid();

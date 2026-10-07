@@ -11,6 +11,7 @@ import { afterChange } from "./tasks";
 import {
   closeTask,
   getConfig,
+  ensureBookClient,
   getLinks,
   getParty,
   insertTask,
@@ -155,6 +156,9 @@ export async function recordSale(input: RecordSaleInput): Promise<RecordSaleResu
       tasksCreated += made.count;
     }
   }
+
+  // Any sale Jorge makes puts the client in his book (no-op if already there).
+  if (qualifying) await ensureBookClient(party.id);
 
   // Shipment obligations (orders always ship; the owner needs the tracking + calls).
   if (qualifying || kind === "OPENER_ONLY") {

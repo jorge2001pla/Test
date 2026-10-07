@@ -38,7 +38,8 @@ import {
   type PromotionKind,
 } from "@/lib/promotions";
 import { onShipmentCreated } from "@/lib/followup/shipping";
-import { run } from "@/lib/followup/store";
+import { ensureBookClient, ensurePartyForClient, run } from "@/lib/followup/store";
+import { isOwnerOpener } from "@/lib/owner";
 import type { ClientStatus } from "@/lib/types";
 import { CLIENT_STATUSES } from "@/lib/types";
 
@@ -75,7 +76,12 @@ export async function createClientAction(formData: FormData): Promise<void> {
     notes: notes || null,
   };
 
-  await createClient(input);
+  const created = await createClient(input);
+  // An account Jorge opened goes straight into his book and the follow-up system.
+  if (isOwnerOpener(input.opener)) {
+    const partyId = await ensurePartyForClient(created.id);
+    if (partyId) await ensureBookClient(partyId);
+  }
   revalidatePath("/");
   revalidatePath("/follow-up");
   redirect("/follow-up");
@@ -205,6 +211,10 @@ export async function updateClientDetailsAction(
     email: d.email?.trim() || null,
     opener: d.opener?.trim() || null,
   });
+  if (isOwnerOpener(d.opener)) {
+    const partyId = await ensurePartyForClient(clientId);
+    if (partyId) await ensureBookClient(partyId);
+  }
   // The first sale date IS the opening date for 50%-list accounts — keep the canonical record in
   // step, unless the opening date was set by hand on the follow-up panel.
   await run([

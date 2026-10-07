@@ -270,3 +270,29 @@ describe("tracking added after the sale", () => {
     expect(Number(ltv[0].lifetime_value)).toBe(800);
   });
 });
+
+describe("sales put the client in the book", () => {
+  it("a 50%-list client with no book record gets one, linked, when a sale is recorded; tracking then works", async () => {
+    await ready();
+    await db.execute("INSERT INTO clients (id, name, phone, opener, first_sale_date, status) VALUES ('gc1','David Garman','954-555-0123','Jorge','2026-10-05','NO_DISPO')");
+    const partyId = (await ensurePartyForClient("gc1"))!;
+    expect((await q("SELECT 1 FROM book_clients WHERE party_id = ?", [partyId])).length).toBe(0);
+    const sale = await recordSale({ partyId, saleDate: "2026-10-07", amount: 400, idemKey: key(), now: NOW });
+    const b = await q<{ id: string; first_name: string; last_name: string }>("SELECT id, first_name, last_name FROM book_clients WHERE party_id = ?", [partyId]);
+    expect(b).toHaveLength(1);
+    expect(`${b[0].first_name} ${b[0].last_name}`).toBe("David Garman");
+    expect((await q<{ book_client_id: string }>("SELECT book_client_id FROM clients WHERE id = 'gc1'"))[0].book_client_id).toBe(b[0].id);
+    const { addTrackingToOrder } = await import("../shipping");
+    expect((await addTrackingToOrder(sale.orderId!, { carrier: "USPS", trackingLink: "https://t/9" }, NOW)).ok).toBe(true);
+    await recordSale({ partyId, saleDate: "2026-10-07", amount: 50, idemKey: key(), now: NOW }); // second sale: no second book record
+    expect((await q("SELECT 1 FROM book_clients WHERE party_id = ?", [partyId])).length).toBe(1);
+  });
+
+  it("an opener-only $19.95 sale (someone else opened) does NOT add them to the book", async () => {
+    await ready();
+    await db.execute("INSERT INTO clients (id, name, phone, opener, first_sale_date, status) VALUES ('gc2','Other Opened','954-555-0999','Mike','2026-10-05','NO_DISPO')");
+    const partyId = (await ensurePartyForClient("gc2"))!;
+    await recordSale({ partyId, saleDate: "2026-10-07", amount: 19.95, kind: "OPENER_ONLY", idemKey: key(), now: NOW });
+    expect((await q("SELECT 1 FROM book_clients WHERE party_id = ?", [partyId])).length).toBe(0);
+  });
+});

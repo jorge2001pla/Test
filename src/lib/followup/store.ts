@@ -393,3 +393,35 @@ export async function pendingTasks(partyId: string): Promise<TaskRow[]> {
 
 export const todayET = (now: Date) => etDate(now);
 export { addDays };
+
+/** Guarantees the person has a book record (creating and linking one from their 50%-list entry
+ * if needed). Called whenever Jorge records a sale or opened the account, so those clients always
+ * land in his book. Idempotent; never touches an existing book record. */
+export async function ensureBookClient(partyId: string): Promise<string | null> {
+  const existing = await q<{ id: string }>("SELECT id FROM book_clients WHERE party_id = ? LIMIT 1", [partyId]);
+  if (existing.length) return existing[0].id;
+  const c = (await q<ClientBits & { name: string }>("SELECT * FROM clients WHERE party_id = ? ORDER BY created_at LIMIT 1", [partyId]))[0];
+  const p = await getPartyRaw(partyId);
+  const full = (c?.name ?? p?.displayName ?? "").trim();
+  if (!full) return null;
+  const [first, ...rest] = full.split(/\s+/);
+  const id = uuid();
+  const now = new Date().toISOString();
+  const stmts: Stmt[] = [
+    {
+      sql: `INSERT INTO book_clients (id, first_name, last_name, phone, email, source, party_id)
+            SELECT ?, ?, ?, ?, ?, 'manual', ? WHERE NOT EXISTS (SELECT 1 FROM book_clients WHERE party_id = ?)`,
+      args: [id, first || null, rest.join(" ") || null, c?.phone ?? p?.phone?.split(";")[0] ?? null, c?.email ?? p?.email ?? null, partyId, partyId],
+    },
+  ];
+  if (c) {
+    stmts.push({
+      sql: "UPDATE clients SET book_client_id = (SELECT id FROM book_clients WHERE party_id = ? LIMIT 1) WHERE id = ? AND book_client_id IS NULL",
+      args: [partyId, c.id],
+    });
+  }
+  stmts.push({ sql: "UPDATE parties SET updated_at = ? WHERE id = ?", args: [now, partyId] });
+  await run(stmts);
+  const after = await q<{ id: string }>("SELECT id FROM book_clients WHERE party_id = ? LIMIT 1", [partyId]);
+  return after[0]?.id ?? null;
+}
