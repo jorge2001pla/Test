@@ -153,6 +153,7 @@ export async function addClientToBookAction(clientId: string): Promise<void> {
     email: client.email,
   });
   await linkClientToBook(clientId, bookClient.id);
+  await ensurePartyForClient(clientId); // stamps the new book record with the client's canonical id
   revalidatePath(`/clients/${clientId}`);
   revalidatePath("/book");
   revalidatePath("/");

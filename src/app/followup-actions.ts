@@ -8,7 +8,7 @@ import { isDateStr, zonedToUtc, ET } from "@/lib/followup/dates";
 import { OUTCOMES, CHANNELS, type Channel, type Outcome } from "@/lib/followup/outcomes";
 import { reconcile } from "@/lib/followup/reconcile";
 import { recordSale, type SaleKind } from "@/lib/followup/sales";
-import { addTrackingToOrder, recordDelivery, recordShipmentException, resolveShipmentException } from "@/lib/followup/shipping";
+import { addTrackingToOrder, recordDelivery, recordShipmentException, resolveShipmentException, updateShipmentExpected } from "@/lib/followup/shipping";
 import { ensurePartyForBook, ensurePartyForClient, getConfig, getLinks, getParty, iso, resolvePartyId, run, saveConfig } from "@/lib/followup/store";
 import { addManualTask, cancelTask, completeTask, rescheduleTaskTo, afterChange } from "@/lib/followup/tasks";
 
@@ -185,6 +185,12 @@ export async function addTrackingAction(orderId: string, carrier: string, tracki
   const r = await addTrackingToOrder(orderId, { carrier, trackingLink, expectedDelivery: expectedDelivery || null });
   refresh(profilePath ?? "");
   return r.ok ? { ok: true, message: "Tracking added to the sale. A “shipped” call is queued." } : { ok: false, error: r.error };
+}
+
+export async function setExpectedDeliveryAction(shipmentId: string, date: string, profilePath?: string): Promise<ActionResult> {
+  const e = await updateShipmentExpected(shipmentId, date || null);
+  refresh(profilePath ?? "");
+  return e ? { ok: false, error: e } : { ok: true, message: date ? "Expected delivery saved — the “delivered?” reminder moved to that date." : "Expected delivery cleared." };
 }
 
 export async function shipmentExceptionAction(shipmentId: string, text: string, profilePath?: string): Promise<ActionResult> {

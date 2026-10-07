@@ -17,6 +17,7 @@ import {
   iso,
   partyZone,
   q,
+  rescheduleTask,
   run,
   type Stmt,
 } from "./store";
@@ -170,9 +171,19 @@ export async function resolveShipmentException(shipmentId: string, resolution: s
   return null;
 }
 
-export async function updateShipmentExpected(shipmentId: string, expected: DateStr | null): Promise<string | null> {
+/** Sets/changes the carrier's estimated delivery date (an estimate — never counts as delivered) and
+ * moves the “has it been delivered?” reminder to that date. */
+export async function updateShipmentExpected(shipmentId: string, expected: DateStr | null, now: Date = new Date()): Promise<string | null> {
   if (expected && !isDateStr(expected)) return "Invalid date.";
-  await run([{ sql: "UPDATE shipments SET expected_delivery = ? WHERE id = ?", args: [expected, shipmentId] }]);
+  const cfg = await getConfig();
+  const stmts: Stmt[] = [{ sql: "UPDATE shipments SET expected_delivery = ?, updated_at = datetime('now') WHERE id = ?", args: [expected, shipmentId] }];
+  if (expected && expected >= etDate(now)) {
+    const due = nextWorkdayOnOrAfter(expected, cfg);
+    for (const t of await q<{ id: string }>("SELECT id FROM fu_tasks WHERE dedupe_key = ? AND status = 'PENDING'", [`track:${shipmentId}`])) {
+      stmts.push(...rescheduleTask(t.id, due, null, `Expected delivery set to ${expected}`, now));
+    }
+  }
+  await run(stmts);
   return null;
 }
 

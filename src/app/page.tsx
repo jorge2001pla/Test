@@ -393,6 +393,7 @@ export default async function DashboardPage({
                             receiptConfirmed={!!s.receiptConfirmedAt}
                             openIssue={s.exception && !s.exceptionResolvedAt ? s.exception : null}
                             profilePath={`/book/${s.bookClientId}`}
+                            expectedDelivery={s.expectedDelivery}
                           />
                         )}
                       </td>

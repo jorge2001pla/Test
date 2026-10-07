@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { recordDeliveryAction } from "@/app/followup-actions";
 import DeliveryQuickActions from "@/components/DeliveryQuickActions";
 import LogContactPanel from "@/components/LogContactPanel";
+import ExpectedDelivery from "@/components/ExpectedDelivery";
 
 function etToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
@@ -24,6 +25,7 @@ export default function ShipmentActions({
   openIssue,
   profilePath,
   hasBook = true,
+  expectedDelivery = null,
 }: {
   shipmentId: string;
   partyId: string;
@@ -33,6 +35,7 @@ export default function ShipmentActions({
   openIssue: string | null;
   profilePath: string;
   hasBook?: boolean;
+  expectedDelivery?: string | null;
 }) {
   const router = useRouter();
   const [date, setDate] = useState(etToday());
@@ -69,6 +72,7 @@ export default function ShipmentActions({
           </>
         )}
       </div>
+      {!deliveredDate && <ExpectedDelivery shipmentId={shipmentId} current={expectedDelivery} profilePath={profilePath} />}
       <DeliveryQuickActions shipmentId={shipmentId} openIssue={openIssue} profilePath={profilePath} />
       {msg && <p className="text-xs text-muted-foreground">{msg}</p>}
       {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}

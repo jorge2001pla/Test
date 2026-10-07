@@ -328,3 +328,31 @@ describe("tracking check reminder", () => {
     expect((await q("SELECT 1 FROM fu_tasks WHERE party_id = ? AND dedupe_key LIKE 'track:%' AND status='PENDING'", [partyId])).length).toBe(0);
   });
 });
+
+describe("no duplicate book record", () => {
+  it("adopts a book record that was linked after the client got its canonical id", async () => {
+    await ready();
+    await db.execute("INSERT INTO clients (id, name, phone, opener, first_sale_date, status) VALUES ('dc1','Dup Check','614-555-0100','Jorge','2026-10-05','NO_DISPO')");
+    const partyId = (await ensurePartyForClient("dc1"))!;
+    // user adds him to the book the old way: book record created and linked, no party stamp
+    await db.execute("INSERT INTO book_clients (id, first_name, last_name, phone, source) VALUES ('dcb1','Dup','Check','614-555-0100','manual')");
+    await db.execute("UPDATE clients SET book_client_id = 'dcb1' WHERE id = 'dc1'");
+    await recordSale({ partyId, saleDate: "2026-10-07", amount: 100, idemKey: key(), now: NOW });
+    const rows = await q<{ id: string; party_id: string }>("SELECT id, party_id FROM book_clients WHERE first_name = 'Dup'");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual({ id: "dcb1", party_id: partyId });
+  });
+});
+
+describe("expected delivery date", () => {
+  it("can be set after the fact and moves the delivered? reminder to that date", async () => {
+    const { partyId } = await book("ExpectedDate");
+    const sale = await recordSale({ partyId, saleDate: "2026-10-07", amount: 150, idemKey: key(), now: NOW });
+    const { addTrackingToOrder, updateShipmentExpected } = await import("../shipping");
+    await addTrackingToOrder(sale.orderId!, { carrier: "USPS", trackingLink: "https://u/1" }, NOW);
+    const sid = (await q<{ id: string }>("SELECT id FROM shipments WHERE order_id = ?", [sale.orderId!]))[0].id;
+    await updateShipmentExpected(sid, "2026-10-09", NOW); // Friday
+    expect((await q<{ expected_delivery: string }>("SELECT expected_delivery FROM shipments WHERE id = ?", [sid]))[0].expected_delivery).toBe("2026-10-09");
+    expect((await q<{ due_date: string }>("SELECT due_date FROM fu_tasks WHERE dedupe_key = ? AND status='PENDING'", [`track:${sid}`]))[0].due_date).toBe("2026-10-09");
+  });
+});

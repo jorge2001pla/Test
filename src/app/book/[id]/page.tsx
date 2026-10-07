@@ -193,6 +193,7 @@ export default async function BookClientDetailPage({
                       receiptConfirmed={!!s.receiptConfirmedAt}
                       openIssue={s.exception && !s.exceptionResolvedAt ? s.exception : null}
                       profilePath={`/book/${client.id}`}
+                      expectedDelivery={s.expectedDelivery}
                     />
                   )}
                 </div>

@@ -178,7 +178,12 @@ export async function ensurePartyForClient(clientId: string): Promise<string | n
   const rows = await q<ClientBits>("SELECT * FROM clients WHERE id = ?", [clientId]);
   const c = rows[0];
   if (!c) return null;
-  if (c.party_id) return resolvePartyId(c.party_id);
+  if (c.party_id) {
+    const pid = await resolvePartyId(c.party_id);
+    // A book record linked AFTER the client got its canonical id must join the same person.
+    if (c.book_client_id) await run([{ sql: "UPDATE book_clients SET party_id = ? WHERE id = ? AND party_id IS NULL", args: [pid, c.book_client_id] }]);
+    return pid;
+  }
   let book: BookBits | undefined;
   if (c.book_client_id) {
     book = (await q<BookBits>("SELECT * FROM book_clients WHERE id = ?", [c.book_client_id]))[0];
@@ -400,6 +405,13 @@ export { addDays };
 export async function ensureBookClient(partyId: string): Promise<string | null> {
   const existing = await q<{ id: string }>("SELECT id FROM book_clients WHERE party_id = ? LIMIT 1", [partyId]);
   if (existing.length) return existing[0].id;
+  // Already linked from the 50% list but not yet stamped with the canonical id → adopt it, never duplicate.
+  const linkedBook = await q<{ id: string }>(
+    "SELECT b.id FROM book_clients b JOIN clients c ON c.book_client_id = b.id WHERE c.party_id = ? LIMIT 1", [partyId]);
+  if (linkedBook.length) {
+    await run([{ sql: "UPDATE book_clients SET party_id = ? WHERE id = ? AND party_id IS NULL", args: [partyId, linkedBook[0].id] }]);
+    return linkedBook[0].id;
+  }
   const c = (await q<ClientBits & { name: string }>("SELECT * FROM clients WHERE party_id = ? ORDER BY created_at LIMIT 1", [partyId]))[0];
   const p = await getPartyRaw(partyId);
   const full = (c?.name ?? p?.displayName ?? "").trim();

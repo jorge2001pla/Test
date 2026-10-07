@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { recordDeliveryAction } from "@/app/followup-actions";
+import ExpectedDelivery from "@/components/ExpectedDelivery";
 
 /** For the “has it been delivered?” reminder: open the carrier tracking page, then mark it delivered
  * here once it says so (that creates the same-day check-in call). */
@@ -35,6 +36,7 @@ export default function TrackingCheck({ shipmentId, trackingLink, profilePath }:
       >
         {pending ? "Saving…" : "It’s delivered"}
       </button>
+      <ExpectedDelivery shipmentId={shipmentId} profilePath={profilePath} />
       {error && <span className="text-xs text-red-600">{error}</span>}
     </div>
   );
