@@ -169,6 +169,10 @@ export const FOLLOWUP_SCHEMA = `
 
 /** [table, column, definition] — nullable/defaulted additions to existing tables. */
 export const FOLLOWUP_COLUMNS: [string, string, string][] = [
+  ["reminders", "due_time", "TEXT"],          // optional HH:MM Eastern for a timed reminder
+  ["notes", "remind_date", "TEXT"],            // optional note reminder (ET date + time)
+  ["notes", "remind_time", "TEXT"],
+  ["notes", "remind_done", "INTEGER NOT NULL DEFAULT 0"],
   ["clients", "party_id", "TEXT"],
   ["book_clients", "party_id", "TEXT"],
   ["shipments", "party_id", "TEXT"],

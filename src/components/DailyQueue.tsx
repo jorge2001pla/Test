@@ -138,7 +138,9 @@ export default function DailyQueue({
         </div>
       )}
 
-      {queue.sections.map((s) => (
+      {queue.totalClients === 0 && <p className="rounded-lg border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">Nothing due right now — you&apos;re all caught up.</p>}
+
+      {queue.sections.filter((s) => s.clients > 0).map((s) => (
         <section key={s.id}>
           <h3 className="flex flex-wrap items-baseline gap-2 font-display text-base font-semibold text-foreground">
             <span className="text-gold">{s.id}.</span> {s.title}
@@ -146,9 +148,7 @@ export default function DailyQueue({
               {s.clients} client{s.clients === 1 ? "" : "s"} · {s.tasks} task{s.tasks === 1 ? "" : "s"}
             </span>
           </h3>
-          {s.clients === 0 ? (
-            <p className="mt-1 text-sm text-muted-foreground">Nothing here.</p>
-          ) : s.rows.length === 0 ? (
+          {s.rows.length === 0 ? (
             <p className="mt-1 text-sm text-muted-foreground">Listed on another page of the queue.</p>
           ) : (
             <ul className="mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">

@@ -8,11 +8,13 @@ export default function ReminderItem({
   id,
   text,
   dueAt,
+  dueTime = null,
   overdue,
 }: {
   id: string;
   text: string;
   dueAt: string | null;
+  dueTime?: string | null;
   overdue: boolean;
 }) {
   const [hidden, setHidden] = useState(false);
@@ -46,7 +48,7 @@ export default function ReminderItem({
         <span className={overdue ? "text-red-600 dark:text-red-400" : "text-foreground"}>
           {text}
           {dueAt && (
-            <span className="ml-2 text-xs text-muted-foreground">Due {formatDate(dueAt)}</span>
+            <span className="ml-2 text-xs text-muted-foreground">Due {formatDate(dueAt)}{dueTime ? ` at ${new Date(`2000-01-01T${dueTime}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} ET` : ""}</span>
           )}
         </span>
       </label>

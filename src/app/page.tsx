@@ -229,72 +229,35 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-display text-lg font-semibold text-foreground">Weekly Goal</h2>
-          <span className="text-xs text-muted-foreground">{weekRange.label}</span>
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          New book clients this week — direct sales and 50% conversions both count.
-        </p>
-        <div className="mt-3 flex items-center gap-4">
-          <p className="text-2xl font-semibold text-gold">
-            {weeklyBookCount}
-            <span className="text-sm font-normal text-muted-foreground"> / {WEEKLY_GOAL}</span>
-          </p>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
-            <div className="h-full rounded-full bg-gold" style={{ width: `${weeklyPct}%` }} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-border bg-card p-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Weekly goal · {weekRange.label}</p>
+          <div className="mt-1 flex items-center gap-3">
+            <p className="text-xl font-semibold text-gold">{weeklyBookCount}<span className="text-sm font-normal text-muted-foreground"> / {WEEKLY_GOAL}</span></p>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-background"><div className="h-full rounded-full bg-gold" style={{ width: `${weeklyPct}%` }} /></div>
           </div>
+          <p className="mt-1 text-xs text-muted-foreground">{paceLabel}</p>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">{paceLabel}</p>
-        <WeeklyTrendChart
-          points={trendPoints}
-          goal={dailyPace}
-          goalLabel={`Daily new-client trend, pace ${dailyPace}/day`}
-          caption={`Dashed line = daily pace (${dailyPace}/day hits the weekly ${WEEKLY_GOAL} across Mon–Fri). Last ${14} days, today highlighted.`}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-5">
-          <h2 className="font-display text-lg font-semibold text-foreground">Whale Tracker</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Goal: {WHALE_GOAL_COUNT} clients at $50k+ — a {formatWholeCurrency(WHALE_GOAL_VALUE)} book.
-          </p>
-          <div className="mt-3 flex items-center gap-4">
-            <p className="text-2xl font-semibold text-gold">
-              {valueStats.whaleCount}
-              <span className="text-sm font-normal text-muted-foreground"> / {WHALE_GOAL_COUNT} Whales</span>
-            </p>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
-              <div
-                className="h-full rounded-full bg-gold"
-                style={{ width: `${Math.min(100, Math.round((valueStats.whaleCount / WHALE_GOAL_COUNT) * 100))}%` }}
-              />
-            </div>
+        <div className="rounded-lg border border-border bg-card p-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Whale Tracker</p>
+          <div className="mt-1 flex items-center gap-3">
+            <p className="text-xl font-semibold text-gold">{valueStats.whaleCount}<span className="text-sm font-normal text-muted-foreground"> / {WHALE_GOAL_COUNT}</span></p>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-background"><div className="h-full rounded-full bg-gold" style={{ width: `${Math.min(100, Math.round((valueStats.whaleCount / WHALE_GOAL_COUNT) * 100))}%` }} /></div>
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {formatWholeCurrency(valueStats.totalValue)} tracked of {formatWholeCurrency(WHALE_GOAL_VALUE)} goal.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{formatWholeCurrency(valueStats.totalValue)} of {formatWholeCurrency(WHALE_GOAL_VALUE)}</p>
         </div>
-
         {campaignCards.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4">
-            {campaignCards.map(({ promo, progress }) => (
-              <CampaignCard key={promo.id} promo={promo} progress={progress} />
-            ))}
-          </div>
-        ) : (
-          <Link
-            href="/campaigns"
-            className="flex flex-col justify-center rounded-lg border border-dashed border-border bg-card p-5 text-center transition-colors hover:border-gold"
-          >
-            <span className="text-sm text-muted-foreground">No active campaign — start a promotion</span>
+          <Link href="/campaigns" className="rounded-lg border border-gold/40 bg-card p-3 hover:shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{campaignCards[0].promo.kind === "COIN_OF_WEEK" ? "Coin of the Week" : "Active Promotion"}{campaignCards.length > 1 ? ` (+${campaignCards.length - 1})` : ""}</p>
+            <p className="mt-1 truncate font-medium text-foreground">{campaignCards[0].promo.name}</p>
+            <p className="text-xs text-gold">{campaignCards[0].progress.emailedCount} emailed · {campaignCards[0].progress.textedCount} texted · {campaignCards[0].progress.calledCount} called of {campaignCards[0].progress.totalClients}</p>
           </Link>
+        ) : (
+          <Link href="/campaigns" className="flex items-center justify-center rounded-lg border border-dashed border-border bg-card p-3 text-sm text-muted-foreground hover:border-gold">No active campaign — start one</Link>
         )}
       </div>
 
-      <div>
+      <div id="queue" className="scroll-mt-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="font-display text-lg font-semibold text-foreground">Today&apos;s Queue</h2>
           <Link
@@ -317,27 +280,101 @@ export default async function DashboardPage({
         </div>
       </div>
 
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div id="reminders" className="scroll-mt-4 rounded-lg border border-border bg-card p-5">
+          <h2 className="font-display text-lg font-semibold text-foreground">Reminders</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Anything you need to remember — check it off when it&apos;s done.
+          </p>
+          <form action={createReminderAction} className="mt-3 flex flex-wrap items-end gap-2">
+            <input
+              name="text"
+              type="text"
+              placeholder="e.g. Call the coin show organizer"
+              required
+              className="min-w-[10rem] flex-1 rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
+            />
+            <input
+              name="dueDate"
+              type="date"
+              className="rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
+            />
+            <input
+              name="dueTime"
+              type="time"
+              title="Optional time (Eastern) — alerts you in the app at that time"
+              className="rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="rounded bg-gold px-3 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
+            >
+              Add
+            </button>
+          </form>
+          {reminders.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No reminders set.</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-border">
+              {reminders.map((r) => (
+                <ReminderItem
+                  key={r.id}
+                  id={r.id}
+                  text={r.text}
+                  dueAt={r.dueAt}
+                  dueTime={r.dueTime}
+                  overdue={!!r.dueAt && r.dueAt < today}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div id="notes" className="scroll-mt-4 rounded-lg border border-border bg-card p-5">
+          <h2 className="font-display text-lg font-semibold text-foreground">Notes</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Quick scratchpad — jot anything down.</p>
+          <form action={createNoteAction} className="mt-3 space-y-2">
+            <textarea
+              name="text"
+              rows={2}
+              placeholder="Type a note..."
+              required
+              className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
+            />
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>Remind me (optional):</span>
+              <input name="remindDate" type="date" className="rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:border-gold focus:outline-none" />
+              <input name="remindTime" type="time" className="rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:border-gold focus:outline-none" />
+            </div>
+            <button
+              type="submit"
+              className="rounded bg-gold px-3 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
+            >
+              Add Note
+            </button>
+          </form>
+          {notes.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No notes yet.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {notes.map((n) => (
+                <NoteItem key={n.id} id={n.id} text={n.text} createdAt={n.createdAt} remindDate={n.remindDate} remindTime={n.remindTime} remindDone={n.remindDone} />
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
       {overdueReminders.length > 0 && (
         <div className="rounded-lg border border-red-600/40 bg-card p-5 dark:border-red-400/40">
           <h2 className="font-display text-lg font-semibold text-red-600 dark:text-red-400">Overdue reminders</h2>
           <ul className="mt-3 divide-y divide-border">
             {overdueReminders.map((r) => (
-              <ReminderItem key={r.id} id={r.id} text={r.text} dueAt={r.dueAt} overdue />
+              <ReminderItem key={r.id} id={r.id} text={r.text} dueAt={r.dueAt} dueTime={r.dueTime} overdue />
             ))}
           </ul>
         </div>
       )}
-
-      <div>
-        <MonthCalendar
-          year={year}
-          month={month}
-          todayDate={localDateString(now)}
-          callbacksByDay={callbacksByDay}
-          prevHref={prevMonthHref}
-          nextHref={nextMonthHref}
-        />
-      </div>
 
       <div>
         <h2 className="font-display text-lg font-semibold text-foreground">Shipments</h2>
@@ -406,118 +443,55 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-5">
-          <h2 className="font-display text-lg font-semibold text-foreground">Reminders</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Anything you need to remember — check it off when it&apos;s done.
-          </p>
-          <form action={createReminderAction} className="mt-3 flex flex-wrap items-end gap-2">
-            <input
-              name="text"
-              type="text"
-              placeholder="e.g. Call the coin show organizer"
-              required
-              className="min-w-[10rem] flex-1 rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
-            />
-            <input
-              name="dueDate"
-              type="date"
-              className="rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
-            />
-            <button
-              type="submit"
-              className="rounded bg-gold px-3 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
-            >
-              Add
-            </button>
-          </form>
-          {reminders.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">No reminders set.</p>
-          ) : (
-            <ul className="mt-2 divide-y divide-border">
-              {reminders.map((r) => (
-                <ReminderItem
-                  key={r.id}
-                  id={r.id}
-                  text={r.text}
-                  dueAt={r.dueAt}
-                  overdue={!!r.dueAt && r.dueAt < today}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="rounded-lg border border-border bg-card p-5">
-          <h2 className="font-display text-lg font-semibold text-foreground">Notes</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Quick scratchpad — jot anything down.</p>
-          <form action={createNoteAction} className="mt-3 space-y-2">
-            <textarea
-              name="text"
-              rows={2}
-              placeholder="Type a note..."
-              required
-              className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none"
-            />
-            <button
-              type="submit"
-              className="rounded bg-gold px-3 py-2 text-sm font-medium text-brand-black transition-opacity hover:opacity-90"
-            >
-              Add Note
-            </button>
-          </form>
-          {notes.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">No notes yet.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {notes.map((n) => (
-                <NoteItem key={n.id} id={n.id} text={n.text} createdAt={n.createdAt} />
-              ))}
-            </ul>
-          )}
-        </div>
+      <div>
+        <MonthCalendar
+          year={year}
+          month={month}
+          todayDate={localDateString(now)}
+          callbacksByDay={callbacksByDay}
+          prevHref={prevMonthHref}
+          nextHref={nextMonthHref}
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Link
-          href="/follow-up"
-          className="block rounded-lg border border-border bg-card p-5 transition-[border-color,box-shadow] hover:border-gold hover:shadow-sm"
-        >
-          <h2 className="font-display text-lg font-semibold text-foreground">50% Follow-Up</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            New clients still inside their 15-day, 50%-commission window.
+      <details className="rounded-lg border border-border bg-card p-4">
+        <summary className="cursor-pointer font-display text-base font-semibold text-foreground">Weekly goal trend</summary>
+        <div className="mt-3">
+        <div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-lg font-semibold text-foreground">Weekly Goal</h2>
+          <span className="text-xs text-muted-foreground">{weekRange.label}</span>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          New book clients this week — direct sales and 50% conversions both count.
+        </p>
+        <div className="mt-3 flex items-center gap-4">
+          <p className="text-2xl font-semibold text-gold">
+            {weeklyBookCount}
+            <span className="text-sm font-normal text-muted-foreground"> / {WEEKLY_GOAL}</span>
           </p>
-          <p className="mt-3 text-2xl font-semibold text-gold">
-            {sections.priority.length}{" "}
-            <span className="text-sm font-normal text-muted-foreground">need attention today</span>
-          </p>
-        </Link>
-
-        <Link
-          href="/book"
-          className="block rounded-lg border border-border bg-card p-5 transition-[border-color,box-shadow] hover:border-gold hover:shadow-sm"
-        >
-          <h2 className="font-display text-lg font-semibold text-foreground">Clients</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Your full existing client book.</p>
-          <p className="mt-3 text-2xl font-semibold text-gold">
-            {bookCount} <span className="text-sm font-normal text-muted-foreground">clients</span>
-          </p>
-        </Link>
-
-        <Link
-          href="/reactivate"
-          className="block rounded-lg border border-border bg-card p-5 transition-[border-color,box-shadow] hover:border-gold hover:shadow-sm"
-        >
-          <h2 className="font-display text-lg font-semibold text-foreground">Reactivation</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Clients whose 30-day cycle ended, plus the cold book ({DORMANT_DAYS}+ days). You choose who to work.
-          </p>
-          <p className="mt-3 text-2xl font-semibold text-gold">
-            {workQueue.length} <span className="text-sm font-normal text-muted-foreground">cold in the book</span>
-          </p>
-        </Link>
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
+            <div className="h-full rounded-full bg-gold" style={{ width: `${weeklyPct}%` }} />
+          </div>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">{paceLabel}</p>
+        <WeeklyTrendChart
+          points={trendPoints}
+          goal={dailyPace}
+          goalLabel={`Daily new-client trend, pace ${dailyPace}/day`}
+          caption={`Dashed line = daily pace (${dailyPace}/day hits the weekly ${WEEKLY_GOAL} across Mon–Fri). Last ${14} days, today highlighted.`}
+        />
       </div>
+
+
+        </div>
+      </details>
+
+      <p className="text-sm text-muted-foreground">
+        <Link href="/reactivate" className="text-gold hover:underline">Reactivation ({workQueue.length} cold in the book)</Link> ·{" "}
+        <Link href="/follow-up" className="text-gold hover:underline">50% Follow-Up ({sections.priority.length} need attention)</Link> ·{" "}
+        <Link href="/reports" className="text-gold hover:underline">Reports</Link>
+      </p>
     </div>
   );
 }

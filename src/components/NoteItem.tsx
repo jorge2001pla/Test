@@ -8,10 +8,16 @@ export default function NoteItem({
   id,
   text,
   createdAt,
+  remindDate = null,
+  remindTime = null,
+  remindDone = false,
 }: {
   id: string;
   text: string;
   createdAt: string;
+  remindDate?: string | null;
+  remindTime?: string | null;
+  remindDone?: boolean;
 }) {
   const [hidden, setHidden] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -29,7 +35,14 @@ export default function NoteItem({
     <li className="flex items-start justify-between gap-3 rounded border border-border bg-background p-3 text-sm">
       <div>
         <p className="whitespace-pre-wrap text-foreground">{text}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(createdAt)}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {formatDateTime(createdAt)}
+          {remindDate && (
+            <span className={remindDone ? "ml-2 line-through" : "ml-2 text-gold"}>
+              ⏰ {remindDate}{remindTime ? ` ${remindTime} ET` : ""}
+            </span>
+          )}
+        </p>
       </div>
       <button
         type="button"

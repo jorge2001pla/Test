@@ -28,7 +28,7 @@ import {
   type Carrier,
 } from "@/lib/shipments";
 import { createReminder, deleteReminder, setReminderDone } from "@/lib/reminders";
-import { createNote, deleteNote } from "@/lib/notes";
+import { createNote, deleteNote, dismissNoteReminder } from "@/lib/notes";
 import {
   createPromotion,
   endPromotion,
@@ -268,7 +268,8 @@ export async function createReminderAction(formData: FormData): Promise<void> {
     throw new Error("Reminder text is required.");
   }
 
-  await createReminder(text, dueDate || null);
+  const dueTime = String(formData.get("dueTime") ?? "").trim();
+  await createReminder(text, dueDate || null, null, dueTime || null);
   revalidatePath("/");
 }
 
@@ -289,7 +290,14 @@ export async function createNoteAction(formData: FormData): Promise<void> {
     throw new Error("Note text is required.");
   }
 
-  await createNote(text);
+  const remindDate = String(formData.get("remindDate") ?? "").trim();
+  const remindTime = String(formData.get("remindTime") ?? "").trim();
+  await createNote(text, remindDate || null, remindTime || null);
+  revalidatePath("/");
+}
+
+export async function dismissNoteReminderAction(id: string): Promise<void> {
+  await dismissNoteReminder(id);
   revalidatePath("/");
 }
 

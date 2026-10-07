@@ -8,6 +8,8 @@ export interface Reminder {
   text: string;
   /** Local YYYY-MM-DD, or null if this reminder has no specific due date. */
   dueAt: string | null;
+  /** Optional HH:MM (Eastern) — makes the reminder a timed in-app alert. */
+  dueTime: string | null;
   done: boolean;
   /** Book client this reminder is about (auto follow-ups), or null for freestanding reminders. */
   bookClientId: string | null;
@@ -18,6 +20,7 @@ interface ReminderRowDb {
   id: string;
   text: string;
   due_at: string | null;
+  due_time?: string | null;
   done: number;
   book_client_id: string | null;
   created_at: string;
@@ -28,6 +31,7 @@ function mapReminder(row: ReminderRowDb): Reminder {
     id: row.id,
     text: row.text,
     dueAt: row.due_at,
+    dueTime: row.due_time ?? null,
     done: !!row.done,
     bookClientId: row.book_client_id,
     createdAt: row.created_at,
@@ -46,12 +50,13 @@ export async function listActiveReminders(): Promise<Reminder[]> {
 export async function createReminder(
   text: string,
   dueAt: string | null,
-  bookClientId: string | null = null
+  bookClientId: string | null = null,
+  dueTime: string | null = null
 ): Promise<void> {
   await ready();
   await db.execute({
-    sql: `INSERT INTO reminders (id, text, due_at, book_client_id, created_at) VALUES (?, ?, ?, ?, ?)`,
-    args: [randomUUID(), text, dueAt, bookClientId, localDateTimeString()],
+    sql: `INSERT INTO reminders (id, text, due_at, due_time, book_client_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    args: [randomUUID(), text, dueAt, dueAt ? dueTime : null, bookClientId, localDateTimeString()],
   });
 }
 
